@@ -3,109 +3,403 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Precursor - Defense Investigation</title>
+  <title>Precursor — Defense Investigation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { margin:0; padding:0; font-family:-apple-system,sans-serif; background:#0a0a0a; color:#e0e0e0; }
-    .container { max-width:1200px; margin:0 auto; padding:2rem; }
-    h1 { font-size:1.5rem; font-weight:700; margin-bottom:0.5rem; }
-    .subtitle { color:#888; font-size:0.9rem; margin-bottom:2rem; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1.5rem; margin-bottom:2rem; }
-    .card { background:#1a1a1a; border:1px solid #333; border-radius:12px; padding:1.5rem; }
-    .card h3 { margin:0 0 0.5rem; font-size:0.85rem; text-transform:uppercase; color:#888; }
-    .card .value { font-size:1.75rem; font-weight:700; }
-    .status-BLOCK { color:#f87171; }
-    .status-ALLOW { color:#4ade80; }
-    .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:600; }
-    .badge-BLOCK { background:rgba(248,113,113,0.2); color:#f87171; }
-    .badge-ALLOW { background:rgba(74,222,128,0.2); color:#4ade80; }
-    .badge-REVIEW { background:rgba(251,191,36,0.2); color:#fbbf24; }
-    .badge-NORMAL { background:rgba(156,163,175,0.2); color:#9ca3af; }
-    table { width:100%; border-collapse:collapse; margin-top:0.5rem; }
-    th,td { text-align:left; padding:0.5rem 0.75rem; border-bottom:1px solid #2a2a2a; font-size:0.85rem; }
-    th { color:#888; font-weight:500; }
-    .story { background:#1a1a1a; border:1px solid #333; border-radius:12px; padding:1.5rem; margin-bottom:1.5rem; }
-    .story h3 { margin:0 0 1rem; font-size:1rem; }
-    .story-step { display:flex; gap:1rem; margin-bottom:0.75rem; align-items:flex-start; }
-    .step-number { width:24px; height:24px; background:#3b82f6; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; flex-shrink:0; }
-    .step-content { flex:1; }
-    .step-title { font-weight:600; margin-bottom:0.15rem; }
-    .step-desc { color:#888; font-size:0.85rem; }
-    .btn { background:#3b82f6; color:white; border:none; padding:0.6rem 1.2rem; border-radius:8px; font-size:0.9rem; cursor:pointer; margin-right:0.5rem; }
-    .btn:hover { background:#2563eb; }
-    .btn-secondary { background:#374151; }
-    .btn-secondary:hover { background:#4b5563; }
-    .status-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
-    .dot-red { background:#f87171; }
-    .dot-green { background:#4ade80; }
-    .evidence-list { list-style:none; padding:0; margin:0; }
-    .evidence-list li { padding:0.25rem 0; border-bottom:1px solid #1a1a1a; font-size:0.85rem; }
-    .empty-state { text-align:center; padding:3rem; color:#666; }
+    :root {
+      --bg: #0a0a0a;
+      --card: #141414;
+      --border: #262626;
+      --text-primary: #e5e5e5;
+      --text-secondary: #9a9a9a;
+      --text-muted: #666;
+      --amber: #f59e0b;
+      --green: #10b981;
+      --red: #ef4444;
+      --yellow: #fbbf24;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+    code, pre {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+    /* Status bar */
+    .status-bar {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--text-muted);
+    }
+    .status-bar .left { display: flex; gap: 1.5rem; align-items: center; }
+    .status-bar .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .dot-active { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+    .dot-healthy { background: var(--green); }
+    .dot-violation { background: var(--red); }
+    .dot-gray { background: var(--text-muted); }
+
+    /* Sections */
+    .section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .section-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .section-title::before {
+      content: "";
+      display: inline-block;
+      width: 4px;
+      height: 16px;
+      background: var(--amber);
+      border-radius: 2px;
+    }
+    .log-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+    }
+    .log-table td {
+      padding: 0.3rem 0.5rem;
+      border-bottom: 1px solid #1a1a1a;
+      color: var(--text-secondary);
+    }
+    .log-table td:first-child { color: var(--text-muted); }
+    .log-table td.highlight { color: var(--text-primary); font-weight: 600; }
+    .evidence-list { list-style: none; margin-top: 0.75rem; }
+    .evidence-list li {
+      padding: 0.3rem 0;
+      border-bottom: 1px solid #1a1a1a;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+    .attack-path { position: relative; padding-left: 1.5rem; }
+    .attack-path::before {
+      content: "";
+      position: absolute;
+      left: 7px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--border);
+    }
+    .path-step {
+      position: relative;
+      margin-bottom: 1.25rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .path-step:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .path-step::before {
+      content: "";
+      position: absolute;
+      left: -1.5rem;
+      top: 0;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--card);
+      border: 2px solid var(--amber);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--amber);
+    }
+    .path-step .step-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .path-step .step-desc {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+    }
+    .path-step .step-component {
+      display: inline-block;
+      margin-top: 0.25rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--amber);
+    }
+    .sim-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      margin-bottom: 0.75rem;
+    }
+    .sim-table th, .sim-table td {
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid #1a1a1a;
+      text-align: left;
+    }
+    .sim-table th {
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+    }
+    .sim-table td { color: var(--text-secondary); }
+    .diff-added { color: var(--green); }
+    .diff-removed { color: var(--red); }
+    .decision-box {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .decision-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 0.3rem 0.8rem;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .badge-block { background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid var(--amber); }
+    .badge-allow { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid var(--green); }
+    .decision-reason { color: var(--text-secondary); font-size: 0.8rem; flex: 1; }
+    .controls { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; }
+    .btn {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--card);
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+    .btn:hover { border-color: var(--amber); }
+    .btn-primary { background: var(--amber); color: #000; font-weight: 600; }
+    .btn-primary:hover { background: #f59e0b; border-color: #f59e0b; }
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Precursor Defense Investigation</h1>
-    <p class="subtitle">DeFi Attack-Behavior Defense Infrastructure - V1</p>
-    <div>
-      <button class="btn" onclick="runScenario()">Run Defense Loop</button>
-      <button class="btn btn-secondary" onclick="loadLatest()">Refresh</button>
+    <div class="status-bar">
+      <div class="left">
+        <span><span class="dot dot-active"></span>IDLE</span>
+        <span><span class="dot dot-gray"></span>CHAIN: 31337</span>
+        <span id="sb-block"><span class="dot dot-gray"></span>BLOCK: —</span>
+        <span id="sb-threats"><span class="dot dot-gray"></span>THREATS: 0</span>
+      </div>
+      <div id="sb-time" style="font-size:0.75rem;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">
+        <span class="dot dot-gray"></span>—:—:—
+      </div>
     </div>
-    <div id="app"></div>
+
+    <div class="controls">
+      <button class="btn btn-primary" onclick="runScenario()">Run Defense Loop</button>
+      <button class="btn" onclick="loadLatest()">Refresh</button>
+    </div>
+
+    <div id="app">
+      <div class="empty-state">
+        No investigation results yet.
+        <br>Click "Run Defense Loop" to execute the defense sequence.
+      </div>
+    </div>
   </div>
+
   <script>
     let latest = null;
+
     async function runScenario() {
-      const res = await fetch('/api/run-scenario', {method:'POST'});
-      latest = await res.json();
-      render();
+      document.getElementById('app').innerHTML = '<div class="empty-state">Running defense loop...</div>';
+      try {
+        const res = await fetch('/api/run-scenario', {method:'POST'});
+        latest = await res.json();
+        render();
+      } catch(e) {
+        document.getElementById('app').innerHTML = '<div class="empty-state">Error: ' + e.message + '</div>';
+      }
     }
+
     async function loadLatest() {
       try {
         const res = await fetch('/api/latest');
         if (res.ok) { latest = await res.json(); render(); }
       } catch(e) { console.error(e); }
     }
+
+    function fmtAddr(a) {
+      if (!a || a === 'unknown') return '—';
+      return a.slice(0, 6) + '…' + a.slice(-4);
+    }
+
+    function fmtPrice(p) {
+      if (!p) return '—';
+      try {
+        let n;
+        if (typeof p === 'bigint') {
+          n = p;
+        } else {
+          n = BigInt(p);
+        }
+        const dollars = n / 1000000000000000000n;
+        const frac = ((n % 1000000000000000000n) * 100n / 1000000000000000000n).toString().padStart(2, '0');
+        return '$' + dollars.toString() + '.' + frac;
+      } catch(e) { return String(p); }
+    }
+
     function render() {
       const app = document.getElementById('app');
-      if (!latest) { app.innerHTML = '<div class="empty-state">No results yet. Click "Run Defense Loop".</div>'; return; }
+      if (!latest || !latest.behaviorObservation) {
+        app.innerHTML = '<div class="empty-state">No investigation results yet.</div>';
+        return;
+      }
+
       const obs = latest.behaviorObservation;
       const path = latest.attackPath;
       const sim = latest.simulation;
       const decision = latest.policyDecision;
       const action = latest.defenseAction;
       const blocked = latest.blocked;
-      const statusClass = blocked ? 'BLOCK' : 'ALLOW';
-      let html = '<div class="grid">';
-      html += '<div class="card"><h3>Attack Status</h3><div class="value status-' + statusClass + '"><span class="status-dot ' + (blocked?'dot-red':'dot-green') + '"></span>' + (blocked?'BLOCKED':'ALLOWED') + '</div></div>';
-      html += '<div class="card"><h3>Pattern</h3><div class="value" style="font-size:1.2rem;">' + (obs?.pattern||'NONE') + '</div></div>';
-      html += '<div class="card"><h3>Confidence</h3><div class="value">' + (obs?.confidence??0) + '%</div></div>';
-      html += '<div class="card"><h3>Invariant</h3><div class="value" style="font-size:1.2rem;">' + (latest.invariant?.isViolated?'VIOLATED':'HEALTHY') + '</div></div>';
-      html += '</div>';
-      html += '<div class="story"><h3>1. What Happened</h3>';
-      if (obs) {
-        html += '<table><tr><th>Event</th><th>Time</th></tr>';
-        obs.sequence.forEach(function(s){ html += '<tr><td>'+s.event+'</td><td>'+s.timestamp+'</td></tr>'; });
-        html += '</table><ul class="evidence-list">';
-        obs.confidenceEvidence.forEach(function(e){ html += '<li>'+e+'</li>'; });
-        html += '</ul>';
-      }
-      html += '</div>';
-      html += '<div class="story"><h3>2. Why It Matters</h3>';
-      if (path) {
-        html += '<p style="color:#888;font-size:0.9rem;">' + path.summary + '</p>';
-        path.steps.forEach(function(step){
-          html += '<div class="story-step"><div class="step-number">' + step.step + '</div><div class="step-content"><div class="step-title">' + step.description + '</div><div class="step-desc">' + step.component + ' | ' + step.stateChange + '</div></div></div>';
+      const inv = latest.invariant;
+      const badgeClass = blocked ? 'badge-block' : 'badge-allow';
+      const badgeText = blocked ? 'BLOCK' : 'ALLOW';
+
+      document.getElementById('sb-block').innerHTML =
+        '<span class="dot ' + (blocked ? 'dot-violation' : 'dot-healthy') + '"></span>BLOCK: ' + (blocked ? 'YES' : 'NO');
+      document.getElementById('sb-threats').innerHTML =
+        '<span class="dot dot-active"></span>THREATS: ' + (obs ? 1 : 0);
+      const now = new Date();
+      document.getElementById('sb-time').innerHTML =
+        '<span class="dot dot-gray"></span>' + now.toISOString().slice(11, 19);
+
+      let h = '';
+
+      /* What Happened */
+      h += '<div class="section">';
+      h += '<div class="section-title">What Happened</div>';
+      h += '<table class="log-table"><thead><tr><th>Time</th><th>Event</th><th>Details</th></tr></thead><tbody>';
+      if (obs.sequence) {
+        obs.sequence.forEach(function(s) {
+          const details = JSON.parse(s.details || '{}');
+          let val = '—';
+          if (details.amount) { val = fmtPrice(details.amount); }
+          if (details.newPrice) { val = fmtPrice(details.newPrice); }
+          h += '<tr><td>' + s.timestamp + '</td><td>' + s.event + '</td><td class="highlight">' + val + '</td></tr>';
         });
       }
-      html += '</div>';
-      html += '<div class="story"><h3>4. What The System Did</h3>';
-      if (decision) {
-        html += '<p><span class="badge badge-' + decision.decision + '">' + decision.decision + '</span> <span class="badge badge-' + (decision.level||'NORMAL') + '">' + (decision.level||'NORMAL') + '</span></p>';
-        html += '<p style="color:#888;">' + decision.reason + '</p>';
+      h += '</tbody></table>';
+      if (obs.confidenceEvidence) {
+        h += '<div style="margin-top:0.75rem;font-weight:600;">Evidence</div>';
+        h += '<ul class="evidence-list">';
+        obs.confidenceEvidence.forEach(function(e) { h += '<li>' + e + '</li>'; });
+        h += '</ul>';
       }
-      html += '</div>';
-      app.innerHTML = html;
+      h += '</div>';
+
+      /* Attack Path */
+      h += '<div class="section">';
+      h += '<div class="section-title">Attack Path</div>';
+      if (path && path.steps) {
+        h += '<div class="attack-path">';
+        path.steps.forEach(function(step) {
+          h += '<div class="path-step">';
+          h += '<div class="step-title">' + step.description + '</div>';
+          h += '<div class="step-desc">' + step.stateChange + '</div>';
+          h += '<div class="step-component">' + step.component + '</div>';
+          h += '</div>';
+        });
+        h += '</div>';
+        if (path.summary) {
+          h += '<p style="color:var(--text-secondary);font-size:0.8rem;margin-top:1rem;">' + path.summary + '</p>';
+        }
+      }
+      h += '</div>';
+
+      /* Simulation */
+      h += '<div class="section">';
+      h += '<div class="section-title">Simulation</div>';
+      if (sim) {
+        h += '<table class="sim-table"><thead><tr><th>Metric</th><th>Before</th><th>After</th></tr></thead><tbody>';
+        h += '<tr><td>Ratio (BPS)</td><td>' + (sim.invariantBefore?.currentRatioBps || '—') + '</td><td>' + (sim.invariantAfter?.currentRatioBps || '—') + '</td></tr>';
+        h += '<tr><td>Healthy</td><td>' + (sim.invariantBefore?.healthy ? 'YES' : 'NO') + '</td><td>' + (sim.invariantAfter?.healthy ? 'YES' : 'NO') + '</td></tr>';
+        h += '<tr><td>Result</td><td colspan="2" class="' + (sim.invariantResult === 'VIOLATION' ? 'diff-removed' : 'diff-added') + '">' + sim.invariantResult + '</td></tr>';
+        if (sim.stateDiff) {
+          h += '<tr><td>Pool Collateral</td><td colspan="2">' + (sim.stateDiff.poolCollateralBalance || '—') + '</td></tr>';
+        }
+        h += '</tbody></table>';
+        if (sim.invariantEvidence) {
+          h += '<ul class="evidence-list">';
+          sim.invariantEvidence.forEach(function(e) { h += '<li>' + e + '</li>'; });
+          h += '</ul>';
+        }
+      }
+      h += '</div>';
+
+      /* Decision */
+      h += '<div class="section">';
+      h += '<div class="section-title">Decision</div>';
+      h += '<div class="decision-box">';
+      h += '<span class="decision-badge ' + badgeClass + '">' + badgeText + '</span>';
+      h += '<div class="decision-reason">';
+      h += (decision?.reason || '') + '<br><br>';
+      h += 'Invariant: ' + (inv?.name || '—') + ' (' + (inv?.isViolated ? 'VIOLATED' : 'HEALTHY') + ')<br>';
+      if (action) {
+        h += 'Action: ' + action.action + ' | Confidence: ' + obs.confidence + '%';
+      }
+      h += '</div></div></div>';
+
+      app.innerHTML = h;
     }
+
     window.onload = loadLatest;
   </script>
 </body>
