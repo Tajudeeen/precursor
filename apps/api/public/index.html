@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Precursor - Defense Investigation</title>
+  <style>
+    body { margin:0; padding:0; font-family:-apple-system,sans-serif; background:#0a0a0a; color:#e0e0e0; }
+    .container { max-width:1200px; margin:0 auto; padding:2rem; }
+    h1 { font-size:1.5rem; font-weight:700; margin-bottom:0.5rem; }
+    .subtitle { color:#888; font-size:0.9rem; margin-bottom:2rem; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1.5rem; margin-bottom:2rem; }
+    .card { background:#1a1a1a; border:1px solid #333; border-radius:12px; padding:1.5rem; }
+    .card h3 { margin:0 0 0.5rem; font-size:0.85rem; text-transform:uppercase; color:#888; }
+    .card .value { font-size:1.75rem; font-weight:700; }
+    .status-BLOCK { color:#f87171; }
+    .status-ALLOW { color:#4ade80; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:600; }
+    .badge-BLOCK { background:rgba(248,113,113,0.2); color:#f87171; }
+    .badge-ALLOW { background:rgba(74,222,128,0.2); color:#4ade80; }
+    .badge-REVIEW { background:rgba(251,191,36,0.2); color:#fbbf24; }
+    .badge-NORMAL { background:rgba(156,163,175,0.2); color:#9ca3af; }
+    table { width:100%; border-collapse:collapse; margin-top:0.5rem; }
+    th,td { text-align:left; padding:0.5rem 0.75rem; border-bottom:1px solid #2a2a2a; font-size:0.85rem; }
+    th { color:#888; font-weight:500; }
+    .story { background:#1a1a1a; border:1px solid #333; border-radius:12px; padding:1.5rem; margin-bottom:1.5rem; }
+    .story h3 { margin:0 0 1rem; font-size:1rem; }
+    .story-step { display:flex; gap:1rem; margin-bottom:0.75rem; align-items:flex-start; }
+    .step-number { width:24px; height:24px; background:#3b82f6; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; flex-shrink:0; }
+    .step-content { flex:1; }
+    .step-title { font-weight:600; margin-bottom:0.15rem; }
+    .step-desc { color:#888; font-size:0.85rem; }
+    .btn { background:#3b82f6; color:white; border:none; padding:0.6rem 1.2rem; border-radius:8px; font-size:0.9rem; cursor:pointer; margin-right:0.5rem; }
+    .btn:hover { background:#2563eb; }
+    .btn-secondary { background:#374151; }
+    .btn-secondary:hover { background:#4b5563; }
+    .status-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+    .dot-red { background:#f87171; }
+    .dot-green { background:#4ade80; }
+    .evidence-list { list-style:none; padding:0; margin:0; }
+    .evidence-list li { padding:0.25rem 0; border-bottom:1px solid #1a1a1a; font-size:0.85rem; }
+    .empty-state { text-align:center; padding:3rem; color:#666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Precursor Defense Investigation</h1>
+    <p class="subtitle">DeFi Attack-Behavior Defense Infrastructure - V1</p>
+    <div>
+      <button class="btn" onclick="runScenario()">Run Defense Loop</button>
+      <button class="btn btn-secondary" onclick="loadLatest()">Refresh</button>
+    </div>
+    <div id="app"></div>
+  </div>
+  <script>
+    let latest = null;
+    async function runScenario() {
+      const res = await fetch('/api/run-scenario', {method:'POST'});
+      latest = await res.json();
+      render();
+    }
+    async function loadLatest() {
+      try {
+        const res = await fetch('/api/latest');
+        if (res.ok) { latest = await res.json(); render(); }
+      } catch(e) { console.error(e); }
+    }
+    function render() {
+      const app = document.getElementById('app');
+      if (!latest) { app.innerHTML = '<div class="empty-state">No results yet. Click "Run Defense Loop".</div>'; return; }
+      const obs = latest.behaviorObservation;
+      const path = latest.attackPath;
+      const sim = latest.simulation;
+      const decision = latest.policyDecision;
+      const action = latest.defenseAction;
+      const blocked = latest.blocked;
+      const statusClass = blocked ? 'BLOCK' : 'ALLOW';
+      let html = '<div class="grid">';
+      html += '<div class="card"><h3>Attack Status</h3><div class="value status-' + statusClass + '"><span class="status-dot ' + (blocked?'dot-red':'dot-green') + '"></span>' + (blocked?'BLOCKED':'ALLOWED') + '</div></div>';
+      html += '<div class="card"><h3>Pattern</h3><div class="value" style="font-size:1.2rem;">' + (obs?.pattern||'NONE') + '</div></div>';
+      html += '<div class="card"><h3>Confidence</h3><div class="value">' + (obs?.confidence??0) + '%</div></div>';
+      html += '<div class="card"><h3>Invariant</h3><div class="value" style="font-size:1.2rem;">' + (latest.invariant?.isViolated?'VIOLATED':'HEALTHY') + '</div></div>';
+      html += '</div>';
+      html += '<div class="story"><h3>1. What Happened</h3>';
+      if (obs) {
+        html += '<table><tr><th>Event</th><th>Time</th></tr>';
+        obs.sequence.forEach(function(s){ html += '<tr><td>'+s.event+'</td><td>'+s.timestamp+'</td></tr>'; });
+        html += '</table><ul class="evidence-list">';
+        obs.confidenceEvidence.forEach(function(e){ html += '<li>'+e+'</li>'; });
+        html += '</ul>';
+      }
+      html += '</div>';
+      html += '<div class="story"><h3>2. Why It Matters</h3>';
+      if (path) {
+        html += '<p style="color:#888;font-size:0.9rem;">' + path.summary + '</p>';
+        path.steps.forEach(function(step){
+          html += '<div class="story-step"><div class="step-number">' + step.step + '</div><div class="step-content"><div class="step-title">' + step.description + '</div><div class="step-desc">' + step.component + ' | ' + step.stateChange + '</div></div></div>';
+        });
+      }
+      html += '</div>';
+      html += '<div class="story"><h3>4. What The System Did</h3>';
+      if (decision) {
+        html += '<p><span class="badge badge-' + decision.decision + '">' + decision.decision + '</span> <span class="badge badge-' + (decision.level||'NORMAL') + '">' + (decision.level||'NORMAL') + '</span></p>';
+        html += '<p style="color:#888;">' + decision.reason + '</p>';
+      }
+      html += '</div>';
+      app.innerHTML = html;
+    }
+    window.onload = loadLatest;
+  </script>
+</body>
+</html>

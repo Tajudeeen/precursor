@@ -26,6 +26,8 @@ const LENDING_POOL_ABI: any = [
   { type: 'function', name: 'borrow', inputs: [{ type: 'uint256', name: 'amount' }], outputs: [] },
   { type: 'function', name: 'withdraw', inputs: [{ type: 'uint256', name: 'withdrawAmount' }, { type: 'uint256', name: 'projectedCollateralValue' }, { type: 'uint256', name: 'projectedDebtValue' }, { type: 'bool', name: 'behaviorFlagged' }, { type: 'uint256', name: 'behaviorConfidence' }], outputs: [] },
   { type: 'function', name: 'disableSecurityController', inputs: [], outputs: [] },
+  { type: 'function', name: 'setSecurityController', inputs: [{ type: 'address', name: '_controller' }], outputs: [] },
+  { type: 'function', name: 'securityController', inputs: [], outputs: [{ type: 'address' }], stateMutability: 'view' },
   { type: 'function', name: 'getBorrowCapacity', inputs: [{ type: 'address', name: 'user' }], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
   { type: 'function', name: 'getUserState', inputs: [{ type: 'address', name: 'user' }], outputs: [{ type: 'uint256' }, { type: 'uint256' }, { type: 'uint256' }, { type: 'uint256' }], stateMutability: 'view' },
 ];
@@ -88,6 +90,27 @@ function loadConfig(): Config {
   };
 }
 
+// Get the security controller address from the pool (stored at deployment)
+async function getControllerAddress(config: Config, client: any): Promise<string> {
+  // Try env var first, then read from chain
+  const envCtrl = process.env.SECURITY_CONTROLLER;
+  if (envCtrl) return envCtrl;
+
+  // Read from the pool's securityController() getter
+  const pub = makePublicClient(config);
+  try {
+    const addr: any = await pub.readContract({
+      address: config.lendingPool,
+      abi: LENDING_POOL_ABI,
+      functionName: 'securityController',
+    });
+    return addr;
+  } catch {
+    // If disabled, try to read from the DeployV1 broadcast
+    return process.env.SECURITY_CONTROLLER || '';
+  }
+}
+
 function makeClient(config: Config, privateKey: string) {
   const account = privateKeyToAccount(privateKey as `0x${string}`);
   return createWalletClient({
@@ -135,6 +158,14 @@ async function runUnprotected(config: Config): Promise<ScenarioResult> {
   const attacker = makeClient(config, config.attackerKey);
   const pub = makePublicClient(config);
   const txs: TxRecord[] = [];
+
+  // Step 0: Disable the security controller (this is the "unprotected" scenario)
+  const disableRes = await sendAndWait(
+    deployer, config.lendingPool,
+    LENDING_POOL_ABI,
+    'disableSecurityController', []
+  );
+  txs.push({ step: 0, description: 'Disable security controller (UNPROTECTED)', txHash: disableRes.hash, status: disableRes.status });
 
   // Step 1: Mint collateral for attacker
   const mintRes = await sendAndWait(
@@ -231,10 +262,21 @@ async function runUnprotected(config: Config): Promise<ScenarioResult> {
 }
 
 async function runProtected(config: Config): Promise<ScenarioResult> {
+  // Use a fresh attacker account for the protected scenario
+  const attackerKey = generatePrivateKey();
   const deployer = makeClient(config, config.deployerKey);
-  const attacker = makeClient(config, config.attackerKey);
+  const attacker = makeClient(config, attackerKey);
   const pub = makePublicClient(config);
   const txs: TxRecord[] = [];
+
+  // Step 0: Re-enable the security controller (deployer only, via setSecurityController)
+  const controllerAddr = await getControllerAddress(config, deployer);
+  const reenableRes = await sendAndWait(
+    deployer, config.lendingPool,
+    LENDING_POOL_ABI,
+    'setSecurityController', [controllerAddr as `0x${string}`]
+  );
+  txs.push({ step: 0, description: 'Re-enable security controller (PROTECTED)', txHash: reenableRes.hash, status: reenableRes.status });
 
   // Step 1: Mint collateral
   const mintRes = await sendAndWait(

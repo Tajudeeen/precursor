@@ -24,6 +24,9 @@ import type { DefenseResult, EvmConfig } from '@precursor/shared';
 const app = express();
 app.use(express.json());
 
+// Serve the investigation UI
+app.use(express.static('public'));
+
 // =====================================================
 // Configuration
 // =====================================================
@@ -63,6 +66,10 @@ let latestResult: DefenseResult | null = null;
 
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/', (_req: Request, res: Response) => {
+  res.sendFile('index.html', { root: 'public' });
 });
 
 app.get('/overview', (_req: Request, res: Response) => {

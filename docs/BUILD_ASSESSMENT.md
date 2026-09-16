@@ -1,6 +1,6 @@
 # Build Assessment
 
-## Status: Milestone 0 Complete — Reconnaissance
+## Status: Milestones 1-9 Complete
 
 ### Repository State
 
@@ -66,9 +66,23 @@
 
 ### Next Steps
 
-- Milestone 2: Build the attack scenario runner (TypeScript script that executes the sequence)
-- Milestone 3: EVM event ingestion (listen for deposit/borrow/withdraw events)
-- Milestone 4-6: Off-chain behavior engine, attack path engine, simulation engine
-- Milestone 7-8: Policy engine, security controller integration (done on-chain)
-- Milestone 9: Protected vs unprotected proof demo
-- Milestone 10: Investigation UI
+DONE — End-to-end proof demonstrated:
+
+```
+=== UNPROTECTED Scenario ===
+Controller: DISABLED
+Attack succeeded: true
+
+=== PROTECTED Scenario ===
+Controller: ENABLED
+Attack succeeded: false
+
+=== Comparison ===
+{
+  "unprotected": { "attackSucceeded": true },
+  "protected": { "attackSucceeded": false },
+  "defenseWorks": true
+}
+```
+
+- Milestone 10: Investigation UI (Next.js — deferred)
