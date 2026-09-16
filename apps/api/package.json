@@ -1,0 +1,14 @@
+{
+  "name": "precursor-api",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "dev": "vitest --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0"
+  }
+}

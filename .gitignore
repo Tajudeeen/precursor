@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+packages/contracts/cache/
+packages/contracts/out/
+packages/contracts/broadcast/
+packages/contracts/forge-config/
+*.log
+.DS_Store
