@@ -100,7 +100,15 @@ export class EvmListener {
 
         if (decoded.eventName && decoded.args) {
           const block = await this.client.getBlock({ blockNumber: log.blockNumber! });
-
+          // Look up the transaction to get the sender (from) address
+          let txFrom = '';
+          try {
+            const tx = await this.client.getTransaction({ hash: log.transactionHash as `0x${string}` });
+            txFrom = (tx?.from ?? '').toLowerCase();
+          } catch (e: any) {
+            // Transaction not found, leave empty
+            console.error(`[evm-listener] getTransaction failed for ${log.transactionHash}: ${e.message}`);
+          }
           normalized.push({
             chain: this.config.chainId.toString(),
             blockNumber: Number(log.blockNumber),
@@ -109,8 +117,8 @@ export class EvmListener {
             transactionIndex: log.transactionIndex ?? 0,
             logIndex: Number(log.logIndex),
             timestamp: Number(block.timestamp),
-            from: '',
-            to: log.address,
+            from: txFrom,
+            to: log.address.toLowerCase(),
             contractAddress: log.address.toLowerCase() as Address,
             eventName: decoded.eventName,
             parameters: this.extractArgs(decoded.args),
@@ -196,12 +204,12 @@ export class EvmListener {
     // First 4 bytes of calldata = function selector
     const selector = tx.input.slice(0, 10);
     const selectors: Record<string, string> = {
-      '0x2e1a7d4d': 'deposit',
-      '0x9f2df1f5': 'borrow',  // not standard, for demo
-      '0xb61d53a8': 'withdraw',  // not standard, for demo
+      '0xa5df5779': 'deposit',
+      '0xf6c1113b': 'borrow',
+      '0x0b9b062d': 'withdraw',
       '0x3dc4d7c2': 'setPrice',
-      '0x7462f793': 'setSecurityController',
-      '0x6ab50a55': 'disableSecurityController',
+      '0x5b9091d7': 'setSecurityController',
+      '0xdcec3523': 'disableSecurityController',
       '0xa9059cbb': 'transfer',
       '0x095ea7b5': 'approve',
     };

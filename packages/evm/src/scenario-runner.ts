@@ -19,6 +19,7 @@ import {
   http,
   parseEther,
   formatEther,
+  parseAbi,
 } from 'viem';
 
 const LENDING_POOL_ABI: any = [
@@ -146,9 +147,13 @@ async function sendAndWait(
       account: undefined,
     });
     const publicClient = makePublicClient(loadConfig());
-    await publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status === 'reverted') {
+      return { hash, status: 'revert' };
+    }
     return { hash, status: 'success' };
   } catch (e: any) {
+    console.error(`  [REVERT] ${fn}: ${e.shortMessage || e.message}`);
     return { hash: '0x' + '0'.repeat(64), status: 'revert' };
   }
 }
@@ -170,7 +175,7 @@ async function runUnprotected(config: Config): Promise<ScenarioResult> {
   // Step 1: Mint collateral for attacker
   const mintRes = await sendAndWait(
     deployer, config.collateral,
-    ['function mint(address to, uint256 amount) external'],
+    parseAbi(['function mint(address to, uint256 amount) external']),
     'mint', [attacker.account.address, COLLATERAL_DEPOSIT]
   );
   txs.push({ step: 1, description: 'Mint collateral for attacker', txHash: mintRes.hash, status: mintRes.status });
@@ -178,7 +183,7 @@ async function runUnprotected(config: Config): Promise<ScenarioResult> {
   // Step 2: Approve pool to spend collateral
   const approveRes = await sendAndWait(
     attacker, config.collateral,
-    ['function approve(address spender, uint256 amount) external returns (bool)'],
+    parseAbi(['function approve(address spender, uint256 amount) external returns (bool)']),
     'approve', [config.lendingPool as `0x${string}`, COLLATERAL_DEPOSIT]
   );
   txs.push({ step: 2, description: 'Approve collateral for pool', txHash: approveRes.hash, status: approveRes.status });
@@ -262,8 +267,8 @@ async function runUnprotected(config: Config): Promise<ScenarioResult> {
 }
 
 async function runProtected(config: Config): Promise<ScenarioResult> {
-  // Use a fresh attacker account for the protected scenario
-  const attackerKey = generatePrivateKey();
+  // Use the deployer key as attacker (funded account on Anvil) with a fresh nonce
+  const attackerKey = config.deployerKey;
   const deployer = makeClient(config, config.deployerKey);
   const attacker = makeClient(config, attackerKey);
   const pub = makePublicClient(config);
@@ -281,7 +286,7 @@ async function runProtected(config: Config): Promise<ScenarioResult> {
   // Step 1: Mint collateral
   const mintRes = await sendAndWait(
     deployer, config.collateral,
-    ['function mint(address to, uint256 amount) external'],
+    parseAbi(['function mint(address to, uint256 amount) external']),
     'mint', [attacker.account.address, COLLATERAL_DEPOSIT]
   );
   txs.push({ step: 1, description: 'Mint collateral for attacker', txHash: mintRes.hash, status: mintRes.status });
@@ -289,7 +294,7 @@ async function runProtected(config: Config): Promise<ScenarioResult> {
   // Step 2: Approve + deposit
   const approveRes = await sendAndWait(
     attacker, config.collateral,
-    ['function approve(address spender, uint256 amount) external returns (bool)'],
+    parseAbi(['function approve(address spender, uint256 amount) external returns (bool)']),
     'approve', [config.lendingPool as `0x${string}`, COLLATERAL_DEPOSIT]
   );
   txs.push({ step: 2, description: 'Approve collateral for pool', txHash: approveRes.hash, status: approveRes.status });

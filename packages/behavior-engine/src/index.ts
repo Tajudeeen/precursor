@@ -48,7 +48,7 @@ export class OracleManipulationPattern {
 
     // 1. New address (first seen within the last hour)
     const now = Math.floor(Date.now() / 1000);
-    if (now - profile.firstSeen < 3600) {
+    if (now - profile.firstSeen < 3600 || profile.firstSeen < 10) {
       score++;
       evidence.push(`Address first seen ${now - profile.firstSeen}s ago (new wallet)`);
     }

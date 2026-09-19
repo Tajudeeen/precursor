@@ -12,6 +12,7 @@
  *   POST /run-scenario   - execute the full defense loop
  */
 
+import path from 'path';
 import express, { Request, Response } from 'express';
 import { EvmListener } from '@precursor/evm';
 import { BehaviorEngine } from '@precursor/behavior-engine';
@@ -25,7 +26,7 @@ const app = express();
 app.use(express.json());
 
 // Serve the investigation UI
-app.use(express.static('public'));
+app.use(express.static(path.join(process.cwd(), 'apps/api/public')));
 
 // =====================================================
 // Configuration
@@ -69,7 +70,7 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 app.get('/', (_req: Request, res: Response) => {
-  res.sendFile('index.html', { root: 'public' });
+  res.sendFile('index.html', { root: path.join(process.cwd(), 'apps/api/public') });
 });
 
 app.get('/overview', (_req: Request, res: Response) => {
@@ -153,6 +154,7 @@ async function runDefenseLoop(): Promise<DefenseResult> {
 
   // 1. Ingest events from the EVM
   const events = await evm.pollNewEvents();
+  console.log(`[defense-loop] ingested ${events.length} events`);
 
   if (events.length === 0) {
     return {
@@ -165,6 +167,11 @@ async function runDefenseLoop(): Promise<DefenseResult> {
 
   // 2. Behavior engine: detect suspicious sequences
   const observations = behaviorEngine.analyze(events);
+  console.log(`[defense-loop] observations: ${observations.length}`);
+  if (observations.length === 0 && events.length > 0) {
+    console.log('[defense-loop] debug: event names:', events.map(e => e.eventName).join(','));
+    console.log('[defense-loop] debug: addresses:', [...new Set(events.map(e => e.from || e.contractAddress))].join(','));
+  }
 
   if (observations.length === 0) {
     return {

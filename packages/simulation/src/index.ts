@@ -93,7 +93,7 @@ export class SimulationEngine {
         {
           key: 'collateralValue',
           before: input.currentCollateralValue,
-          after: projectedCollateralValue,
+          after: projectedCollateralValue.toString(),
         },
         {
           key: 'borrowCapacity',
@@ -103,7 +103,7 @@ export class SimulationEngine {
         {
           key: 'debt',
           before: input.currentDebt,
-          after: projectedDebt,
+          after: projectedDebt.toString(),
         },
       ],
     };
@@ -134,7 +134,7 @@ export class SimulationEngine {
         borrowCapacity: input.currentBorrowCapacity,
       },
       simulatedState: {
-        collateralValue: projectedCollateralValue,
+        collateralValue: projectedCollateralValue.toString(),
         borrowCapacity: this.computeProjectedBorrowCapacity(projectedCollateralValue),
       },
       stateDiff,

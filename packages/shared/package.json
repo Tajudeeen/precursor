@@ -2,8 +2,5 @@
   "name": "@precursor/shared",
   "version": "0.1.0",
   "main": "dist/index.js",
-  "scripts": {
-    "build": "tsc",
-    "test": "vitest run"
-  }
+  "types": "dist/index.d.ts"
 }
