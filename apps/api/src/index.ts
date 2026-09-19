@@ -152,8 +152,9 @@ app.post('/run-scenario', async (req: Request, res: Response) => {
 async function runDefenseLoop(): Promise<DefenseResult> {
   const now = Math.floor(Date.now() / 1000);
 
-  // 1. Ingest events from the EVM
-  const events = await evm.pollNewEvents();
+  // 1. Ingest events from the EVM — always poll from block 0 so the
+  //    defense loop is reproducible even if called multiple times.
+  const events = await evm.pollNewEvents(0n);
   console.log(`[defense-loop] ingested ${events.length} events`);
 
   if (events.length === 0) {
