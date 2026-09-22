@@ -12,6 +12,6 @@
     "outDir": "dist",
     "types": ["node"]
   },
-  "include": ["packages/**/src", "packages/**/test", "apps/**/src"],
-  "exclude": ["node_modules", "dist", "packages/contracts"]
+  "include": ["packages/**/src", "packages/**/test", "apps/api/src"],
+  "exclude": ["node_modules", "dist", "packages/contracts", "apps/web"]
 }

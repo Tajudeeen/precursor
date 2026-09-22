@@ -2,7 +2,7 @@
  * Policy Engine — Maps behavior observation + simulation result + invariant
  * evaluation into a deterministic ALLOW / REVIEW / BLOCK decision.
  *
- * The policy is purely rule-based. No ML, no AI. Deterministic and
+ * The policy is purely rule-based. Zero heuristic drift. Deterministic and
  * explainable. The decision is sent to the on-chain SecurityController.
  */
 
@@ -12,8 +12,15 @@ import type {
   PolicyDecision,
   DefenseAction,
 } from '@precursor/shared';
+import { Logger } from '@precursor/shared';
+
+export interface PolicyOptions {
+  simulationUnavailable?: boolean;
+}
 
 export class PolicyEngine {
+  private logger = new Logger('policy-engine');
+
   /**
    * Map inputs to a policy decision.
    *
@@ -21,7 +28,7 @@ export class PolicyEngine {
    *
    * CRITICAL → BLOCK
    *   - behaviorFlagged AND confidence >= 70
-   *   - AND simulation shows invariant violation
+   *   - AND simulation shows invariant violation (or simulation failed - fail-safe)
    *   - AND asset impact is significant
    *
    * HIGH → REVIEW
@@ -39,7 +46,8 @@ export class PolicyEngine {
    */
   makeDecision(
     observation?: BehaviorObservation,
-    simulation?: SimulationResult
+    simulation?: SimulationResult,
+    options?: PolicyOptions
   ): PolicyDecision {
     const now = Math.floor(Date.now() / 1000);
     const evidence: string[] = [];
@@ -59,6 +67,20 @@ export class PolicyEngine {
     evidence.push(...observation.confidenceEvidence);
     evidence.push(`Pattern: ${observation.pattern}`);
     evidence.push(`Confidence: ${observation.confidence}%`);
+
+    // FAIL-SAFE FALLBACK: If simulation is unavailable/failed on high-confidence threat
+    if (options?.simulationUnavailable || (!simulation && observation.confidence >= 70)) {
+      this.logger.warn('Simulation unavailable with high confidence threat; enforcing fail-safe BLOCK');
+      evidence.push('SIMULATION UNAVAILABLE — Fail-safe policy active');
+      return {
+        level: 'CRITICAL',
+        decision: 'BLOCK',
+        reason: 'SIMULATION UNAVAILABLE — defaulting to BLOCK per fail-safe security policy',
+        evidence,
+        invariantResult: 'VIOLATION',
+        timestamp: now,
+      };
+    }
 
     if (simulation) {
       evidence.push(...simulation.invariantEvidence);

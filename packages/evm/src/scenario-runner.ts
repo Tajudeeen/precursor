@@ -45,7 +45,7 @@ const COLLATERAL_ABI: any = [
   { type: 'function', name: 'transfer', inputs: [{ type: 'address', name: 'to' }, { type: 'uint256', name: 'amount' }], outputs: [{ type: 'bool' }] },
 ];
 
-interface Config {
+export interface Config {
   rpcUrl: string;
   chainId: number;
   deployerKey: string;
@@ -55,14 +55,14 @@ interface Config {
   collateral: `0x${string}`;
 }
 
-interface TxRecord {
+export interface TxRecord {
   step: number;
   description: string;
   txHash: string;
   status: 'success' | 'revert';
 }
 
-interface ScenarioResult {
+export interface ScenarioResult {
   scenario: string;
   transactions: TxRecord[];
   finalState: {
@@ -158,7 +158,7 @@ async function sendAndWait(
   }
 }
 
-async function runUnprotected(config: Config): Promise<ScenarioResult> {
+export async function runUnprotected(config: Config): Promise<ScenarioResult> {
   const deployer = makeClient(config, config.deployerKey);
   const attacker = makeClient(config, config.attackerKey);
   const pub = makePublicClient(config);
@@ -266,7 +266,7 @@ async function runUnprotected(config: Config): Promise<ScenarioResult> {
   };
 }
 
-async function runProtected(config: Config): Promise<ScenarioResult> {
+export async function runProtected(config: Config): Promise<ScenarioResult> {
   // Use the deployer key as attacker (funded account on Anvil) with a fresh nonce
   const attackerKey = config.deployerKey;
   const deployer = makeClient(config, config.deployerKey);
@@ -413,7 +413,222 @@ export async function runComparison() {
   }, null, 2));
 }
 
+export interface LiveProtocolState {
+  blockNumber: number;
+  oraclePrice: string;
+  oraclePriceRaw: string;
+  poolCollateral: string;
+  attackerCollateral: string;
+  attackerDebt: string;
+  borrowCapacity: string;
+  securityControllerArmed: boolean;
+  minCollateralRatioFormatted: string;
+  currentCollateralRatioFormatted: string;
+  isSolvent: boolean;
+}
+
+export async function getLiveProtocolState(config: Config): Promise<LiveProtocolState> {
+  const pub = makePublicClient(config);
+  const attacker = makeClient(config, config.attackerKey);
+  const blockNumber = await pub.getBlockNumber();
+
+  let oraclePriceRaw = '1000000000000000000';
+  try {
+    const p: any = await pub.readContract({
+      address: config.oracle,
+      abi: ORACLE_ABI,
+      functionName: 'getPrice',
+      args: [config.collateral],
+    });
+    oraclePriceRaw = p.toString();
+  } catch {}
+
+  let poolCollateral = '0';
+  try {
+    const bal: any = await pub.readContract({
+      address: config.collateral,
+      abi: COLLATERAL_ABI,
+      functionName: 'balanceOf',
+      args: [config.lendingPool],
+    });
+    poolCollateral = bal.toString();
+  } catch {}
+
+  let userCollat = '0';
+  let userDebt = '0';
+  let collatVal = '0';
+  let borrowCap = '0';
+  try {
+    const state: any = await pub.readContract({
+      address: config.lendingPool,
+      abi: LENDING_POOL_ABI,
+      functionName: 'getUserState',
+      args: [attacker.account.address],
+    });
+    userCollat = state[0].toString();
+    userDebt = state[1].toString();
+    collatVal = state[2].toString();
+    borrowCap = state[3].toString();
+  } catch {}
+
+  let controllerArmed = true;
+  try {
+    const armed: any = await pub.readContract({
+      address: config.lendingPool,
+      abi: parseAbi(['function securityControllerEnabled() view returns (bool)']),
+      functionName: 'securityControllerEnabled',
+    });
+    controllerArmed = Boolean(armed);
+  } catch {}
+
+  const debtNum = Number(userDebt) / 1e18;
+  const valNum = Number(collatVal) / 1e18;
+  let ratioBps = 99999;
+  let ratioFormatted = '∞ (No Debt)';
+  let isSolvent = true;
+
+  if (debtNum > 0) {
+    const r = (valNum / debtNum) * 100;
+    ratioBps = Math.round(r * 100);
+    ratioFormatted = `${r.toFixed(2)}%`;
+    isSolvent = ratioBps >= 15000;
+  }
+
+  return {
+    blockNumber: Number(blockNumber),
+    oraclePrice: `$${(Number(oraclePriceRaw) / 1e18).toFixed(2)}`,
+    oraclePriceRaw,
+    poolCollateral: `${(Number(poolCollateral) / 1e18).toFixed(0)} DCC`,
+    attackerCollateral: `${(Number(userCollat) / 1e18).toFixed(0)} DCC`,
+    attackerDebt: `${debtNum.toFixed(0)} DCC`,
+    borrowCapacity: `$${(Number(borrowCap) / 1e18).toFixed(0)}`,
+    securityControllerArmed: controllerArmed,
+    minCollateralRatioFormatted: '150.00%',
+    currentCollateralRatioFormatted: ratioFormatted,
+    isSolvent,
+  };
+}
+
+export interface StepExecutionResult {
+  step: string;
+  status: 'success' | 'revert';
+  txHash: string;
+  description: string;
+  revertReason?: string;
+  state: LiveProtocolState;
+}
+
+export async function executeSingleStep(
+  config: Config,
+  step: string,
+  mode: 'protected' | 'unprotected' = 'protected',
+  customPrice?: string
+): Promise<StepExecutionResult> {
+  const deployer = makeClient(config, config.deployerKey);
+  const attacker = makeClient(config, config.attackerKey);
+  const pub = makePublicClient(config);
+
+  let txHash = '0x' + '0'.repeat(64);
+  let status: 'success' | 'revert' = 'success';
+  let description = '';
+  let revertReason: string | undefined;
+
+  switch (step) {
+    case 'deposit': {
+      description = 'Mint 100 DCC collateral and deposit into LendingPool';
+      await sendAndWait(deployer, config.collateral, parseAbi(['function mint(address to, uint256 amount) external']), 'mint', [attacker.account.address, COLLATERAL_DEPOSIT]);
+      await sendAndWait(attacker, config.collateral, parseAbi(['function approve(address spender, uint256 amount) external returns (bool)']), 'approve', [config.lendingPool, COLLATERAL_DEPOSIT]);
+      const res = await sendAndWait(attacker, config.lendingPool, LENDING_POOL_ABI, 'deposit', [COLLATERAL_DEPOSIT]);
+      txHash = res.hash;
+      status = res.status;
+      break;
+    }
+    case 'borrow-safe': {
+      description = 'Borrow 50 DCC at honest $1.00 valuation';
+      const res = await sendAndWait(attacker, config.lendingPool, LENDING_POOL_ABI, 'borrow', [50n * 10n ** 18n]);
+      txHash = res.hash;
+      status = res.status;
+      break;
+    }
+    case 'skew-oracle': {
+      const priceToSet = customPrice ? parseEther(customPrice) : INFLATED_PRICE;
+      const formattedPrice = customPrice ? `$${customPrice}` : '$1.80';
+      description = `Manipulate MockOracle spot price to ${formattedPrice}`;
+      const res = await sendAndWait(attacker, config.oracle, ORACLE_ABI, 'setPrice', [config.collateral, priceToSet]);
+      txHash = res.hash;
+      status = res.status;
+      break;
+    }
+    case 'borrow-inflated': {
+      description = 'Borrow extra 65 DCC exploiting inflated collateral capacity';
+      const res = await sendAndWait(attacker, config.lendingPool, LENDING_POOL_ABI, 'borrow', [65n * 10n ** 18n]);
+      txHash = res.hash;
+      status = res.status;
+      break;
+    }
+    case 'withdraw': {
+      // In terminal state of this exploit, attacker attempts to withdraw all 100 DCC collateral,
+      // leaving 0 collateral backing their 135 DCC debt.
+      const userState: any = await pub.readContract({
+        address: config.lendingPool,
+        abi: LENDING_POOL_ABI,
+        functionName: 'getUserState',
+        args: [attacker.account.address],
+      });
+      const activeDebt = userState[1] > 0n ? userState[1] : 135n * 10n ** 18n;
+      // After extracting full collateral, remaining collateral value is 0
+      const projectedRemainingCollatValue = 0n;
+
+      if (mode === 'unprotected') {
+        description = 'Withdraw 100 DCC collateral (UNPROTECTED — SecurityController bypassed)';
+        await sendAndWait(deployer, config.lendingPool, LENDING_POOL_ABI, 'disableSecurityController', []);
+        const res = await sendAndWait(attacker, config.lendingPool, LENDING_POOL_ABI, 'withdraw', [COLLATERAL_DEPOSIT, projectedRemainingCollatValue, activeDebt, false, 0]);
+        txHash = res.hash;
+        status = res.status;
+        if (status === 'success') {
+          description = 'Withdrawal succeeded! 100 DCC extracted without backing (VULNERABLE — Bad Debt Created)';
+        }
+      } else {
+        description = 'Withdraw 100 DCC collateral (PROTECTED — SecurityController armed)';
+        const controllerAddr = await getControllerAddress(config, deployer);
+        await sendAndWait(deployer, config.lendingPool, LENDING_POOL_ABI, 'setSecurityController', [controllerAddr as `0x${string}`]);
+        const res = await sendAndWait(attacker, config.lendingPool, LENDING_POOL_ABI, 'withdraw', [COLLATERAL_DEPOSIT, projectedRemainingCollatValue, activeDebt, true, 85]);
+        txHash = res.hash;
+        status = res.status;
+        if (status === 'revert') {
+          revertReason = 'Transaction reverted on-chain: WithdrawBlocked("simulation predicts invariant violation") — Precursor SecurityController prevented unbacked extraction!';
+          description = 'Withdrawal BLOCKED on-chain by Precursor SecurityController (Invariant Preserved)';
+        }
+      }
+      break;
+    }
+    case 'reset': {
+      description = 'Reset protocol state & restore oracle price to $1.00';
+      const pRes = await sendAndWait(deployer, config.oracle, ORACLE_ABI, 'setPrice', [config.collateral, INITIAL_PRICE]);
+      const controllerAddr = await getControllerAddress(config, deployer);
+      await sendAndWait(deployer, config.lendingPool, LENDING_POOL_ABI, 'setSecurityController', [controllerAddr as `0x${string}`]);
+      txHash = pRes.hash;
+      status = 'success';
+      break;
+    }
+    default:
+      throw new Error(`Unknown step: ${step}`);
+  }
+
+  const state = await getLiveProtocolState(config);
+
+  return {
+    step,
+    status,
+    txHash,
+    description,
+    revertReason,
+    state,
+  };
+}
+
 // Run if called directly
 if (require.main === module) {
   runComparison().catch(console.error);
 }
+

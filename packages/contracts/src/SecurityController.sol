@@ -4,6 +4,10 @@ pragma solidity ^0.8.20;
 import { MockOracle } from "./MockOracle.sol";
 import { ControlledCollateral } from "./ControlledCollateral.sol";
 
+interface IProtectedLendingPool {
+    function userDebt(address user) external view returns (uint256);
+}
+
 /// @title SecurityController — a narrow, opt-in gate that the LendingPool
 ///       calls before critical operations (withdraw, borrow). The controller
 ///       delegates to an external policy contract for the ALLOW/REVIEW/BLOCK
@@ -178,6 +182,22 @@ contract SecurityController {
         // If behavior engine flagged the sequence AND simulation shows
         // invariant violation, block deterministically.
         if (behaviorFlagged && behaviorConfidence >= 70) {
+            uint256 actualDebt = 0;
+            if (protectedProtocol != address(0)) {
+                try IProtectedLendingPool(protectedProtocol).userDebt(attacker) returns (uint256 d) {
+                    actualDebt = d;
+                } catch {}
+            }
+
+            // Evasion defense: An attacker who has an active on-chain debt obligation cannot claim 0 debt or lower debt
+            if (actualDebt > 0 && projectedDebtValue < actualDebt) {
+                return (
+                    Decision.Block,
+                    "behavior-flagged sequence + evasion: projected debt cannot be lower than on-chain debt",
+                    0
+                );
+            }
+
             // Run the same invariant check — behavior flag raises
             // sensitivity threshold but final call is on the invariant.
             if (projectedDebtValue == 0) {

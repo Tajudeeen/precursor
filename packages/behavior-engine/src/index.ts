@@ -43,58 +43,68 @@ export class OracleManipulationPattern {
     evidence: string[];
   } {
     const evidence: string[] = [];
+
+    // Core signal checks
+    const depositEvents = events.filter(e => e.eventName === 'CollateralDeposited');
+    const borrowEvents = events.filter(e => e.eventName === 'Borrowed');
+    const priceEvents = events.filter(e => e.eventName === 'PriceUpdated');
+    const withdrawEvents = events.filter(e => e.eventName === 'Withdrawn');
+
+    // 1. If deposit + borrow + price update are all present, this is an active manipulation sequence
+    if (depositEvents.length > 0 && borrowEvents.length > 0 && (priceEvents.length > 0 || profile.oracleInteractions > 0)) {
+      let conf = 75;
+      evidence.push(`Deposit (${depositEvents.length}) and borrow (${borrowEvents.length}) activity detected`);
+      if (priceEvents.length > 0) {
+        evidence.push(`${priceEvents.length} price update(s) detected during position lifecycle`);
+      }
+      if (borrowEvents.length > 1) {
+        conf += 15;
+        evidence.push('Subsequent borrow detected after oracle price inflation (phantom capacity)');
+      }
+      if (withdrawEvents.length > 0) {
+        conf += 10;
+        evidence.push('Collateral withdrawal attempt detected');
+      }
+      const confidence = Math.min(100, conf);
+      return {
+        matched: confidence >= OracleManipulationPattern.CONFIDENCE_THRESHOLD,
+        confidence,
+        evidence,
+      };
+    }
+
+    // Fallback: point-based evaluation
     let score = 0;
     const maxScore = 5;
 
-    // 1. New address (first seen within the last hour)
+    // Address freshness
     const now = Math.floor(Date.now() / 1000);
     if (now - profile.firstSeen < 3600 || profile.firstSeen < 10) {
       score++;
-      evidence.push(`Address first seen ${now - profile.firstSeen}s ago (new wallet)`);
+      evidence.push(`Address first seen recently (new wallet)`);
     }
 
-    // 2. Recent funding
-    if (profile.totalInteractions > 0 && profile.events.some(e =>
-      e.parameters?.value && BigInt(e.parameters.value) > 0n &&
-      e.eventName === 'Transaction'
-    )) {
+    if (profile.oracleInteractions > 0 || priceEvents.length > 0) {
       score++;
-      evidence.push('Recent funding transaction detected');
+      evidence.push(`Oracle interactions / price updates detected`);
     }
 
-    // 3. Oracle interaction
-    const oracleInteractions = events.filter(e =>
-      e.contractAddress && e.parameters?.token
-    );
-    if (profile.oracleInteractions > 0) {
+    if (depositEvents.length > 0) {
       score++;
-      evidence.push(`${profile.oracleInteractions} oracle interaction(s) detected`);
+      evidence.push(`Collateral deposit activity detected`);
     }
 
-    // 4. Abnormal price state change
-    const priceEvents = events.filter(e => e.eventName === 'PriceUpdated');
-    if (priceEvents.length > 0) {
+    if (borrowEvents.length > 0) {
       score++;
-      evidence.push(`${priceEvents.length} price state change(s) detected`);
+      evidence.push(`Borrow activity detected`);
     }
 
-    // 5. Collateral state change (deposit + borrow)
-    const depositEvents = events.filter(e => e.eventName === 'CollateralDeposited');
-    const borrowEvents = events.filter(e => e.eventName === 'Borrowed');
-    if (depositEvents.length > 0 && borrowEvents.length > 0) {
-      score++;
-      evidence.push(`Deposit + borrow activity: ${depositEvents.length} deposit(s), ${borrowEvents.length} borrow(s)`);
-    }
-
-    // 6. Withdrawal attempt
-    const withdrawEvents = events.filter(e => e.eventName === 'Withdrawn');
     if (withdrawEvents.length > 0) {
       score++;
       evidence.push(`Withdrawal attempt detected`);
     }
 
     const confidence = Math.round((score / maxScore) * 100);
-
     return {
       matched: confidence >= OracleManipulationPattern.CONFIDENCE_THRESHOLD,
       confidence,
@@ -180,29 +190,41 @@ export class BehaviorEngine {
   analyze(events: NormalizedEvent[]): BehaviorObservation[] {
     const observations: BehaviorObservation[] = [];
 
-    // Group events by address
+    // Protocol-wide price updates
+    const protocolPriceEvents = events.filter(e => e.eventName === 'PriceUpdated');
+
+    // Group events by actor address
     const addressEvents = this.groupByAddress(events);
 
     for (const [address, addrEvents] of Object.entries(addressEvents)) {
-      const profile = this.buildProfile(address, addrEvents);
+      // Include protocol price updates that occurred around the actor's positions
+      const combinedEvents = [...addrEvents];
+      for (const pe of protocolPriceEvents) {
+        if (!combinedEvents.some(e => e.transactionHash === pe.transactionHash && e.logIndex === pe.logIndex)) {
+          combinedEvents.push(pe);
+        }
+      }
+      combinedEvents.sort((a, b) => a.timestamp - b.timestamp || a.blockNumber - b.blockNumber || a.logIndex - b.logIndex);
+
+      const profile = this.buildProfile(address, combinedEvents);
 
       for (const pattern of this.patterns) {
-        const result = pattern.evaluate(profile, addrEvents);
+        const result = pattern.evaluate(profile, combinedEvents);
 
         if (result.matched) {
           observations.push({
             pattern: pattern.constructor.name,
             address,
-            events: addrEvents.map(e => e.eventName),
-            contracts: [...new Set(addrEvents.map(e => e.contractAddress))],
-            sequence: addrEvents.map(e => ({
+            events: combinedEvents.map(e => e.eventName),
+            contracts: [...new Set(combinedEvents.map(e => e.contractAddress))],
+            sequence: combinedEvents.map(e => ({
               event: e.eventName,
               timestamp: e.timestamp,
               details: JSON.stringify(e.parameters),
             })),
             confidence: result.confidence,
             confidenceEvidence: result.evidence,
-            timestamp: Math.max(...addrEvents.map(e => e.timestamp)),
+            timestamp: Math.max(...combinedEvents.map(e => e.timestamp)),
           });
         }
       }
@@ -214,9 +236,12 @@ export class BehaviorEngine {
   private groupByAddress(events: NormalizedEvent[]): Record<string, NormalizedEvent[]> {
     const grouped: Record<string, NormalizedEvent[]> = {};
     for (const event of events) {
-      const key = event.from || event.to || event.contractAddress;
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(event);
+      const user = (event.parameters?.user as string) || (event.parameters?.to as string) || event.from;
+      if (user && user !== '0x0000000000000000000000000000000000000000') {
+        const key = user.toLowerCase();
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(event);
+      }
     }
     return grouped;
   }

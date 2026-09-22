@@ -31,19 +31,18 @@ contract LendingPoolTest is Test {
         vm.deal(attacker, 10000 ether);
         vm.deal(victim, 10000 ether);
 
-        vm.prank(deployer);
+        vm.startPrank(deployer);
         oracle     = new MockOracle();
         collateral = new ControlledCollateral();
         pool       = new LendingPool(address(oracle), address(collateral));
 
         // Grant the pool mint access for the borrow token (simulated)
-        vm.prank(deployer);
         oracle.setDecimals(address(collateral), 18);
-        vm.prank(deployer);
         oracle.setPrice(address(collateral), INITIAL_PRICE);
 
         collateral.mint(attacker, COLLATERAL_DEPOSIT);
         collateral.mint(victim, COLLATERAL_DEPOSIT);
+        vm.stopPrank();
     }
 
     function _deployController() internal {

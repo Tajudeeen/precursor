@@ -31,29 +31,26 @@ contract AdversarialTest is Test {
         vm.deal(attacker, 10000 ether);
         vm.deal(attackerSybil, 10000 ether);
 
-        vm.prank(deployer);
+        vm.startPrank(deployer);
         oracle     = new MockOracle();
         collateral = new ControlledCollateral();
         pool       = new LendingPool(address(oracle), address(collateral));
 
-        vm.prank(deployer);
         oracle.setDecimals(address(collateral), 18);
-        vm.prank(deployer);
         oracle.setPrice(address(collateral), INITIAL_PRICE);
 
         collateral.mint(attacker, COLLATERAL_DEPOSIT);
         collateral.mint(attackerSybil, COLLATERAL_DEPOSIT);
 
         // Deploy and arm controller by default for adversarial tests
-        vm.prank(deployer);
         controller = new SecurityController(
             address(oracle),
             address(collateral),
             address(pool),
             address(0)
         );
-        vm.prank(deployer);
         pool.setSecurityController(address(controller));
+        vm.stopPrank();
     }
 
     // =====================================================
@@ -272,5 +269,88 @@ contract AdversarialTest is Test {
 
         // Attacker got collateral back
         assertGt(collateral.balanceOf(attacker), 0);
+    }
+
+    // =====================================================
+    // Evasion tests: zero or understated projected debt with active debt
+    // =====================================================
+
+    function testAttackerWithDebtCannotBypassControllerWithZeroProjectedDebt() public {
+        vm.prank(attacker);
+        collateral.approve(address(pool), COLLATERAL_DEPOSIT);
+        vm.prank(attacker);
+        pool.deposit(COLLATERAL_DEPOSIT);
+
+        vm.prank(attacker);
+        pool.borrow(50e18);
+
+        // Attacker owes 50e18 on-chain, but passes projectedDebt = 0 with behaviorFlagged = true
+        // The controller should catch the discrepancy and BLOCK
+        vm.prank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "WithdrawBlocked(string)",
+                "simulation predicts invariant violation"
+            )
+        );
+        pool.withdraw(
+            50e18,
+            0,
+            0,
+            true,
+            90
+        );
+    }
+
+    // =====================================================
+    // Accounting tests: incremental deposits and clean withdrawal clears
+    // =====================================================
+
+    function testDepositAndWithdrawAccountingAccuracy() public {
+        vm.prank(attacker);
+        collateral.approve(address(pool), COLLATERAL_DEPOSIT);
+
+        // Deposit 20 tokens
+        vm.prank(attacker);
+        pool.deposit(20e18);
+        assertEq(pool.totalCollateral(address(collateral)), 20e18);
+
+        // Deposit 20 more tokens (should be 40e18 total, not inflated)
+        vm.prank(attacker);
+        pool.deposit(20e18);
+        assertEq(pool.totalCollateral(address(collateral)), 40e18);
+
+        // Withdraw all 40 tokens (should return to 0)
+        vm.prank(attacker);
+        pool.withdraw(40e18, 40e18, 0, false, 0);
+        assertEq(pool.totalCollateral(address(collateral)), 0);
+    }
+
+    // =====================================================
+    // Invariant tests: Borderline Review threshold is blocked on-chain
+    // =====================================================
+
+    function testWithdrawalUnderReviewIsBlocked() public {
+        vm.prank(attacker);
+        collateral.approve(address(pool), COLLATERAL_DEPOSIT);
+        vm.prank(attacker);
+        pool.deposit(COLLATERAL_DEPOSIT);
+
+        // ratio = 100/60 = 166% -> Review status (between 150% and 170%)
+        // When withdrawal triggers Review, LendingPool fails closed
+        vm.prank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "WithdrawBlocked(string)",
+                "withdrawal requires manual review: collateral ratio approaching threshold"
+            )
+        );
+        pool.withdraw(
+            30e18,
+            100e18,
+            60e18,
+            false,
+            0
+        );
     }
 }

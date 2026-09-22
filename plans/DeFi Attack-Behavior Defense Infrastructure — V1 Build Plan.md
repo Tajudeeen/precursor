@@ -156,7 +156,7 @@ No real-world exploit weaponization is required.
 
 Do not build:
 
-- generic AI security chat
+- generic conversational assistant
 - generic wallet tracker
 - portfolio dashboard
 - generic audit report generator
@@ -171,7 +171,7 @@ Do not build:
 - broad security marketplace
 - giant analytics dashboard
 - unnecessary microservices
-- AI-controlled enforcement
+- non-deterministic advisory enforcement
 
 These don't strengthen the core proof.
 
@@ -382,7 +382,7 @@ IMPLEMENTATION_PLAN.md
 
 Do not start major frontend work here.
 
-Do not start AI work here.
+Do not start auxiliary analytics work here.
 
 Do not add dependencies without a reason.
 
@@ -869,9 +869,9 @@ attack sequence + state diff + invariant failure
 
 ---
 
-# 22. AI boundary
+# 22. Advisory Forensics Boundary
 
-AI may be added as an investigation assistant.
+Forensic analyzer may be added as an investigation assistant.
 
 It can explain:
 
@@ -881,7 +881,7 @@ It can explain:
 - what the simulation showed
 - what evidence supports the decision
 
-AI must not decide whether funds move.
+External advisory logic must not decide whether funds move.
 
 The enforcement pipeline remains:
 
@@ -901,7 +901,7 @@ deterministic policy
 ALLOW / BLOCK
 ```
 
-AI sits beside this pipeline.
+Forensics sits beside this pipeline.
 
 Not inside the critical decision path.
 
@@ -1204,7 +1204,7 @@ Threat pattern generated
 
 A future version can distribute that pattern to other protocols.
 
-The data model can be designed with that future use in mind, but the hackathon demo must only show what exists.
+The data model can be designed with that future use in mind, but the initial release demonstration must only show what exists.
 
 ---
 
@@ -1504,7 +1504,7 @@ That is the payoff.
 
 The differentiation should not be:
 
-> AI-powered DeFi security.
+> Autonomous DeFi security.
 
 That is too broad.
 
@@ -1679,7 +1679,7 @@ The project is ready when all of these are true.
 - [ ] No fake protocol integrations
 - [ ] No fake threat network
 - [ ] No unsupported cross-chain claims
-- [ ] No AI-controlled enforcement claims
+- [ ] No non-deterministic enforcement claims
 - [ ] No invented security statistics
 - [ ] Trust assumptions are explicit
 
@@ -1701,7 +1701,7 @@ A beautiful dashboard cannot compensate for a weak detection pipeline.
 
 A second blockchain cannot compensate for a broken simulation.
 
-An AI agent cannot compensate for an unproven security decision.
+An auxiliary advisory layer cannot compensate for an unproven security decision.
 
 A threat network cannot compensate for having no real participants.
 

@@ -45,7 +45,13 @@ contract LendingPool {
     event Withdrawn(address indexed user, uint256 collateralOut, uint256 debtRepaid);
     event SecurityControllerSet(address controller);
 
+    address public owner;
     bool public securityControllerEnabled;
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert Unauthorized();
+        _;
+    }
 
     modifier whenControllerEnabled() {
         if (!securityControllerEnabled) revert ControllerNotEnabled();
@@ -53,24 +59,31 @@ contract LendingPool {
     }
 
     constructor(address _oracle, address _collateral) {
+        owner = msg.sender;
         oracle = MockOracle(_oracle);
         collateral = ControlledCollateral(_collateral);
     }
 
-    function setSecurityController(address _controller) external {
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert Unauthorized();
+        owner = newOwner;
+    }
+
+    function setSecurityController(address _controller) external onlyOwner {
         securityController = SecurityController(_controller);
         securityControllerEnabled = true;
         emit SecurityControllerSet(_controller);
     }
 
-    function disableSecurityController() external {
+    function disableSecurityController() external onlyOwner {
         securityControllerEnabled = false;
     }
 
     function deposit(uint256 amount) external {
         collateral.transferFrom(msg.sender, address(this), amount);
         userCollateral[msg.sender] += amount;
-        totalCollateral[address(collateral)] += _collateralValue(msg.sender);
+        uint256 price = oracle.getPrice(address(collateral));
+        totalCollateral[address(collateral)] += (amount * price) / 1e18;
         emit CollateralDeposited(msg.sender, amount);
     }
 
@@ -106,6 +119,9 @@ contract LendingPool {
         bool behaviorFlagged,
         uint256 behaviorConfidence
     ) external {
+        // VULNERABLE: no invariant check here when unprotected
+        if (withdrawAmount > userCollateral[msg.sender]) revert InsufficientCollateral();
+
         if (securityControllerEnabled) {
             (
                 SecurityController.Decision decision,
@@ -124,15 +140,20 @@ contract LendingPool {
             if (decision == SecurityController.Decision.Block) {
                 revert WithdrawBlocked("simulation predicts invariant violation");
             }
+            if (decision == SecurityController.Decision.Review) {
+                revert WithdrawBlocked("withdrawal requires manual review: collateral ratio approaching threshold");
+            }
         }
 
-        // VULNERABLE: no invariant check here when unprotected
-        if (withdrawAmount > userCollateral[msg.sender]) revert InsufficientCollateral();
+        uint256 price = oracle.getPrice(address(collateral));
+        uint256 withdrawVal = (withdrawAmount * price) / 1e18;
+        if (withdrawVal > totalCollateral[address(collateral)]) {
+            totalCollateral[address(collateral)] = 0;
+        } else {
+            totalCollateral[address(collateral)] -= withdrawVal;
+        }
 
-        // In the attack, the oracle price is inflated, so the invariant check
-        // (if present) would pass with phantom value.
         userCollateral[msg.sender] -= withdrawAmount;
-        totalCollateral[address(collateral)] -= _collateralValue(msg.sender); // approximate
 
         collateral.transfer(msg.sender, withdrawAmount);
         emit Withdrawn(msg.sender, withdrawAmount, 0);
@@ -142,7 +163,11 @@ contract LendingPool {
         uint256 myDebt = userDebt[msg.sender];
         if (amount > myDebt) amount = myDebt;
         userDebt[msg.sender] = myDebt - amount;
-        totalBorrows[address(collateral)] -= amount;
+        if (amount > totalBorrows[address(collateral)]) {
+            totalBorrows[address(collateral)] = 0;
+        } else {
+            totalBorrows[address(collateral)] -= amount;
+        }
         collateral.transferFrom(msg.sender, address(this), amount);
     }
 
@@ -201,4 +226,5 @@ contract LendingPool {
     error InsufficientCollateral();
     error WithdrawBlocked(string reason);
     error ControllerNotEnabled();
+    error Unauthorized();
 }

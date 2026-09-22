@@ -1,91 +1,116 @@
-# Precursor — DeFi Attack-Behavior Defense Infrastructure
+# Precursor
 
-V1: Behavior-first defense against oracle-manipulation attacks on a controlled lending protocol.
+Precursor is a behavior-first, pre-transaction DeFi defense system that detects predatory transaction sequences, simulates invariant impact before withdrawal, and blocks unsafe actions via an on-chain `SecurityController` gate.
 
-## What Is Actually Real
+## What this project does
 
-### On-Chain (Solidity + Foundry)
-- `MockOracle.sol` — price feed with owner-gated `setDecimals` and unrestricted `setPrice` (the vulnerability)
-- `ControlledCollateral.sol` — ERC20 collateral token with `mint`
-- `SecurityController.sol` — defense decision engine, on-chain invariant evaluation (150% collateral ratio), `evaluateDefenseExternal` public entry point
-- `LendingPool.sol` — vulnerable lending protocol with deposit/borrow/withdraw, `getInvariant()`, `getUserState()`
-- `LendingPool.t.sol` — 11 Foundry unit tests: invariant health, unprotected attack succeeds, protected attack blocked
-- `Adversarial.t.sol` — 6 Foundry adversarial tests: sybil, false positive, repeated attempts, controller disable
-- **17/17 tests passing** on Foundry v1.8.3, Solidity 0.8.20
+Precursor monitors EVM event streams, detects high-confidence attack sequences such as deposit → borrow → oracle manipulation → phantom borrow, simulates the post-transaction state against collateralization invariants, and enforces a deterministic block decision before collateral can be withdrawn.
 
-### Off-Chain (TypeScript)
-- `@precursor/shared` — shared types (zod-validated schemas)
-- `@precursor/evm` — EVM event ingestion + attacker scenario runner (viem)
-- `@precursor/behavior-engine` — rule-based behavior detection (6 behavioral signals)
-- `@precursor/attack-analysis` — attack path reconstruction from behavior evidence
-- `@precursor/simulation` — Anvil fork simulation + state diff
-- `@precursor/policy-engine` — deterministic ALLOW/REVIEW/BLOCK decisions (3 rules)
-- `apps/api` — Express.js control + investigation API (4 endpoints)
+## Core architecture
 
-## Defense Loop
+- Smart contracts in `packages/contracts`
+- Shared types and schemas in `packages/shared`
+- EVM ingestion and event decoding in `packages/evm`
+- Behavioral sequence detection in `packages/behavior-engine`
+- Attack path reconstruction in `packages/attack-analysis`
+- Simulation and invariant evaluation in `packages/simulation`
+- Policy gating in `packages/policy-engine`
+- API and investigation UI in `apps/api` and `apps/web`
 
-```
-EVM Events → Behavior Engine → Attack Path → Simulation → Invariant → Policy → Defense Action
-```
+## Security model
 
-1. **Ingest**: EVM listener polls blocks/logs, decodes events into normalized format
-2. **Detect**: Behavior engine matches events against oracle-manipulation pattern (6 signals, 70% threshold)
-3. **Reconstruct**: Attack path engine builds the narrative sequence from evidence
-4. **Simulate**: Simulation engine forks chain at current block, runs attack, computes state/asset diffs
-5. **Evaluate**: Invariant engine checks collateralization ratio (150% threshold)
-6. **Decide**: Policy engine maps observation + simulation → BLOCK/REVIEW/ALLOW
-7. **Act**: API sends decision to on-chain SecurityController
+The system follows a fail-closed pattern:
 
-## Quick Start
+- advisory engines explain and classify behavior
+- deterministic policy logic validates the result
+- on-chain contract logic enforces the final decision
+
+Never use unverified heuristic output to move funds or sign transactions directly.
+
+## Required setup
+
+1. Install Node.js and npm.
+2. Install Foundry (`forge`, `cast`, `anvil`).
+3. Copy `.env.example` to a real env file and fill in deployment values.
+4. Start a local chain for testing:
 
 ```bash
-# Terminal 1: Start local chain
 anvil -p 8555
+```
 
-# Terminal 2: Deploy contracts
-forge script Deploy.s.sol:DeployScript --rpc-url http://127.0.0.1:8555 --broadcast --private-key $KEY
+5. Set the environment variables for the API and contract addresses.
 
-# Terminal 3: Run Foundry tests
-forge test -vvv
+## Local development
 
-# Terminal 4: Build + run API
+```bash
+npm install
 npm run build
+npm run verify
 npm run dev:api
 ```
 
-## Test Coverage
+You can also run the contract suite directly:
 
-### Solidity (Foundry)
-```
-LendingPoolTest:     11 tests, 0 failures
-AdversarialTest:     6 tests, 0 failures
-Total:              17 tests, 0 failures
+```bash
+cd packages/contracts
+forge test
 ```
 
-### TypeScript (Vitest)
+## Production deployment checklist
+
+See [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md).
+
+## Environment variables
+
+A minimal template is in [.env.example](.env.example).
+
+Required production values include:
+
+- `NODE_ENV`
+- `PORT`
+- `RPC_URL`
+- `CHAIN_ID`
+- `LENDING_POOL`
+- `ORACLE`
+- `COLLATERAL`
+- `SECURITY_CONTROLLER`
+- `PRECURSOR_API_KEY`
+
+## Verification
+
+The project’s release standard is:
+
+```bash
+npm run verify
 ```
-behavior-engine:  2 tests, 0 failures
-policy-engine:   4 tests, 0 failures
-Total:           6 tests, 0 failures
-```
 
-## Key Design Decisions
+This runs:
 
-1. **V1 scope**: Single attack vector (oracle manipulation → borrow → withdraw)
-2. **No ML/AI**: Behavior detection is pure rule-based (6 signals, threshold-based)
-3. **Deterministic**: Policy engine is fully deterministic — same inputs → same decision
-4. **On-chain enforcement**: SecurityController evaluates defense on-chain, not off-chain
+- TypeScript typecheck
+- Vitest unit and integration tests
+- Foundry contract tests
+- monorepo build
 
-## Files
+## Operator notes
 
-```
-packages/contracts/       Solidity contracts + Foundry tests
-packages/shared/          Shared TypeScript types
-packages/evm/             EVM ingestion + attacker scenario runner
-packages/behavior-engine/ Rule-based behavior detection
-packages/attack-analysis/ Attack path reconstruction
-packages/simulation/      Anvil fork simulation
-packages/policy-engine/   Deterministic policy decisions
-apps/api/                 Express.js investigation API
-docs/                     Architecture, threat model, build assessment
+- Use the API only with a valid `X-Precursor-Key` header.
+- Treat all contract addresses as deployment-critical values.
+- Do not expose production secrets in source control or logs.
+- If the simulation layer is unavailable, the policy gate fails closed.
+
+## Project structure
+
+```text
+apps/
+  api/
+  web/
+docs/
+packages/
+  attack-analysis/
+  behavior-engine/
+  contracts/
+  evm/
+  policy-engine/
+  shared/
+  simulation/
 ```

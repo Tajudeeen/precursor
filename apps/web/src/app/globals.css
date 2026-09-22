@@ -1,0 +1,386 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Ambit Warm Editorial Theme (Default, matching sampleUI.jpg) */
+  --ink: #111215;
+  --paper: #F7F7F2;
+  --surface: #FFFFFF;
+  --surface-strong: #FAF9F5;
+  --surface-hover: #F2F2EC;
+  --line: #E5E5DF;
+  --line-strong: #D0D0C8;
+  
+  --lime: #D4F63D;
+  --lime-dim: rgba(212, 246, 61, 0.25);
+  --lime-dark: #A3C914;
+  --olive: #4E7514;
+  
+  --alert-bg: #FEECEB;
+  --alert-border: #FCD2D0;
+  --alert-text: #901B18;
+  
+  --text-main: #111215;
+  --text-muted: #44443E;
+  --text-dim: #66665E;
+  
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 10px 30px -10px rgba(0, 0, 0, 0.03);
+}
+
+.dark {
+  --ink: #06080c;
+  --paper: #090c12;
+  --surface: #0e121a;
+  --surface-strong: #141824;
+  --surface-hover: #181e2e;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  
+  --lime: #00F5A0;
+  --lime-dim: rgba(0, 245, 160, 0.15);
+  --lime-dark: #00D2FF;
+  --olive: #00F5A0;
+  
+  --alert-bg: rgba(255, 51, 102, 0.1);
+  --alert-border: rgba(255, 51, 102, 0.25);
+  --alert-text: #FF3366;
+  
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+  
+  --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  color: var(--text-main);
+  background-color: var(--paper);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Card Surface (matching sampleUI.jpg white cards with clean borders) */
+.cyber-card, .ambit-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  border-radius: 16px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cyber-card:hover, .ambit-card:hover {
+  border-color: var(--line-strong);
+}
+
+/* Ambit Highlight Marker behind key words */
+.marker-highlight {
+  display: inline-block;
+  background-color: #D4F63D;
+  color: #111215;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+
+.dark .marker-highlight {
+  background-color: #00F5A0;
+  color: #06080c;
+}
+
+/* Primary Action Buttons (matching sampleUI.jpg black pill buttons) */
+.btn-cyber-primary, .btn-ambit-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #111215;
+  color: #FFFFFF;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: -0.01em;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: all 0.18s ease-in-out;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.dark .btn-cyber-primary, .dark .btn-ambit-primary {
+  background: #00F5A0;
+  color: #06080c;
+  box-shadow: 0 0 20px rgba(0, 245, 160, 0.25);
+}
+
+.btn-cyber-primary:hover:not(:disabled), .btn-ambit-primary:hover:not(:disabled) {
+  background: #25262B;
+  transform: translateY(-1px);
+}
+
+.dark .btn-cyber-primary:hover:not(:disabled) {
+  background: #1affb2;
+}
+
+.btn-cyber-primary:disabled, .btn-ambit-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Secondary Outline Buttons */
+.btn-cyber-secondary, .btn-ambit-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--paper);
+  color: var(--text-main);
+  font-weight: 500;
+  font-size: 0.82rem;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  transition: all 0.18s ease-in-out;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-cyber-secondary:hover, .btn-ambit-secondary:hover {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+/* Category Badge Icon (Square with lime background from sampleUI) */
+.ambit-icon-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background-color: #D4F63D;
+  color: #111215;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dark .ambit-icon-badge {
+  background-color: #00F5A0;
+  color: #06080c;
+}
+
+/* Global Form Controls & Select Options */
+select option {
+  background-color: var(--surface);
+  color: var(--text-main);
+}
+
+/* Alert Banner (matching sampleUI soft coral/pink alert box) */
+.ambit-alert-banner {
+  background-color: #FEECEB;
+  border: 1px solid #FCD2D0;
+  color: #901B18;
+  border-radius: 16px;
+}
+
+.dark .ambit-alert-banner {
+  background-color: rgba(255, 51, 102, 0.08);
+  border-color: rgba(255, 51, 102, 0.25);
+  color: #FF3366;
+}
+
+/* Splash Modal Styles */
+.splash-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 18, 21, 0.75);
+  backdrop-filter: blur(10px);
+  padding: 16px;
+  animation: splashFadeIn 200ms ease-out;
+}
+
+.splash-container {
+  width: min(680px, 100%);
+  background: #FFFFFF;
+  border: 1px solid #E5E5DF;
+  border-radius: 20px;
+  padding: clamp(20px, 4vw, 36px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  position: relative;
+  color: #111215;
+}
+
+.dark .splash-container {
+  background: #0d1118;
+  border-color: rgba(0, 245, 160, 0.35);
+  color: #ffffff;
+}
+
+.splash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.splash-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: #4E7514;
+  background: #F0F7DE;
+  border: 1px solid #D4F63D;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.dark .splash-tag {
+  color: #00F5A0;
+  background: rgba(0, 245, 160, 0.08);
+  border-color: rgba(0, 245, 160, 0.22);
+}
+
+.splash-tag .signal-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7DA61C;
+  animation: pulseDot 1.4s infinite ease-in-out;
+}
+
+.dark .splash-tag .signal-pulse {
+  background: #00F5A0;
+}
+
+.splash-title {
+  margin: 0 0 8px;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #111215;
+  line-height: 1.2;
+}
+
+.dark .splash-title {
+  color: #ffffff;
+}
+
+.splash-desc {
+  color: #33332D;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin: 0 0 24px;
+}
+
+.dark .splash-desc {
+  color: #94a3b8;
+}
+
+.splash-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 640px) {
+  .splash-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.splash-card {
+  background: #F7F7F2;
+  border: 1px solid #E5E5DF;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.dark .splash-card {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.splash-card-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111215;
+  margin-bottom: 2px;
+}
+
+.dark .splash-card-val {
+  color: #00F5A0;
+}
+
+.splash-card-label {
+  font-size: 0.72rem;
+  color: #44443E;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dark .splash-card-label {
+  color: #94a3b8;
+}
+
+.splash-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+@keyframes splashFadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}

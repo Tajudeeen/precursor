@@ -8,7 +8,7 @@
 - Text: `#e5e5e5` primary, `#9a9a9a` secondary, `#666` muted
 - Accent: `#f59e0b` (amber) — for BLOCK/decision highlights only
 - Status green: `#10b981` | red: `#ef4444` | yellow: `#f59e0b`
-- No blue anywhere (avoids the AI boilerplate look)
+- No blue anywhere (avoids generic boilerplate look)
 
 ### Typography
 - Primary: JetBrains Mono (monospace) for all data, logs, evidence

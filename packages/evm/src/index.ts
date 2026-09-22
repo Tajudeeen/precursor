@@ -1,24 +1,17 @@
-/**
- * EVM Event Ingestion Module
- * 
- * Listens to EVM blocks/transactions, decodes events/logs,
+/** EVM Event Ingestion Module — Listens to EVM blocks/transactions, decodes events/logs,
  * and normalizes them into the shared NormalizedEvent format.
  * The rest of the system never needs to understand raw RPC structures.
  */
-
 import type { Address } from 'viem';
 import {
   createPublicClient,
   http,
   parseAbi,
   decodeEventLog,
-  type Log,
   type TransactionReceipt,
-  type Transaction,
 } from 'viem';
 import type { NormalizedEvent } from '@precursor/shared';
 
-// The ABI fragments we care about — deposit, borrow, withdraw, price update
 const EVENT_ABI = parseAbi([
   'event CollateralDeposited(address indexed user, uint256 amount)',
   'event Borrowed(address indexed user, uint256 amount, uint256 collateralValue)',
@@ -59,56 +52,40 @@ export class EvmListener {
     });
   }
 
-  /**
-   * Poll for new blocks and return normalized events.
-   */
+  /** Poll for new blocks and return normalized events.
+   * Queries logs per-block to work around viem+anvil range query issues. */
   async pollNewEvents(sinceBlock?: bigint): Promise<NormalizedEvent[]> {
     const fromBlock = sinceBlock ?? this.fromBlock;
     const toBlock = await this.client.getBlockNumber();
-
     if (toBlock <= fromBlock) return [];
-
-    // Fetch logs for our contracts in the block range
-    const logs: any[] = await this.client.getLogs({
-      fromBlock,
-      toBlock,
-      addresses: Object.values(this.config.contractAddresses),
-      topics: [],
-    });
-
-    // Also fetch transactions to detect function calls (oracle.setPrice, etc.)
-    const txs: Transaction[] = [];
-    for (let block = fromBlock; block <= toBlock; block++) {
-      const blockData = await this.client.getBlock({ blockNumber: block, includeTransactions: true });
-      if (blockData.transactions) {
-        txs.push(...blockData.transactions.filter(tx => tx.to));
-      }
-    }
 
     const normalized: NormalizedEvent[] = [];
 
-    // Process logs (events)
-    for (const log of logs) {
-      if (!this.isWatchedContract(log.address)) continue;
+    for (let block = fromBlock; block <= toBlock; block++) {
+      // Per-block log query — avoids the viem/anvil large-range bug
+      const logs: any[] = await this.client.getLogs({
+        fromBlock: block,
+        toBlock: block,
+        address: Object.values(this.config.contractAddresses),
+        topics: [],
+      } as any);
 
-      try {
-        const decoded: any = decodeEventLog({
-          abi: EVENT_ABI,
-          data: log.data,
-          topics: log.topics,
-        });
+      const blockData = await this.client.getBlock({ blockNumber: block, includeTransactions: true });
+      const blockTs = Number(blockData.timestamp);
 
-        if (decoded.eventName && decoded.args) {
-          const block = await this.client.getBlock({ blockNumber: log.blockNumber! });
-          // Look up the transaction to get the sender (from) address
+      // Decode event logs
+      for (const log of logs) {
+        if (!this.isWatchedContract(log.address)) continue;
+        try {
+          const decoded: any = decodeEventLog({ abi: EVENT_ABI, data: log.data, topics: log.topics });
+          if (!decoded.eventName || !decoded.args) continue;
+
           let txFrom = '';
           try {
             const tx = await this.client.getTransaction({ hash: log.transactionHash as `0x${string}` });
             txFrom = (tx?.from ?? '').toLowerCase();
-          } catch (e: any) {
-            // Transaction not found, leave empty
-            console.error(`[evm-listener] getTransaction failed for ${log.transactionHash}: ${e.message}`);
-          }
+          } catch {}
+
           normalized.push({
             chain: this.config.chainId.toString(),
             blockNumber: Number(log.blockNumber),
@@ -116,7 +93,7 @@ export class EvmListener {
             transactionHash: log.transactionHash ?? '',
             transactionIndex: log.transactionIndex ?? 0,
             logIndex: Number(log.logIndex),
-            timestamp: Number(block.timestamp),
+            timestamp: blockTs,
             from: txFrom,
             to: log.address.toLowerCase(),
             contractAddress: log.address.toLowerCase() as Address,
@@ -125,26 +102,25 @@ export class EvmListener {
             gas: 0,
             status: 'success',
           });
+        } catch {
+          // Not a recognized event, skip
         }
-      } catch {
-        // Not a recognized event, skip
       }
-    }
 
-    // Process transactions (function calls — to detect oracle.setPrice etc.)
-    for (const tx of txs) {
-      if (tx.to && this.isWatchedContract(tx.to)) {
-        const block = await this.client.getBlock({ blockNumber: tx.blockNumber! });
-        const normalizedTx: NormalizedEvent = {
+      // Detect function calls (oracle.setPrice, etc.) via transaction calldata
+      const txs = (blockData.transactions || []) as any[];
+      for (const tx of txs) {
+        if (!tx.to || !this.isWatchedContract(tx.to)) continue;
+        normalized.push({
           chain: this.config.chainId.toString(),
           blockNumber: Number(tx.blockNumber),
           blockHash: tx.blockHash ?? '',
           transactionHash: tx.hash ?? '',
           transactionIndex: tx.transactionIndex ?? 0,
           logIndex: 0,
-          timestamp: Number(block.timestamp),
-          from: (tx.from ?? '').toLowerCase() as Address,
-          to: (tx.to ?? '').toLowerCase() as Address,
+          timestamp: blockTs,
+          from: (tx.from ?? '').toLowerCase(),
+          to: (tx.to ?? '').toLowerCase(),
           contractAddress: tx.to.toLowerCase() as Address,
           eventName: 'Transaction',
           parameters: {
@@ -154,21 +130,15 @@ export class EvmListener {
           },
           gas: Number(tx.gas ?? 0),
           status: 'success',
-        };
-        normalized.push(normalizedTx);
+        });
       }
     }
 
-    // Update fromBlock
     this.fromBlock = toBlock + 1n;
-
     return normalized;
   }
 
-  /**
-   * Block until the next block, then poll events.
-   * Used in the demo flow to wait for transactions.
-   */
+  /** Block until the next block, then poll events. */
   async waitForEvents(timeoutMs: number = 30000): Promise<NormalizedEvent[]> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -186,22 +156,16 @@ export class EvmListener {
   private extractArgs(args: Record<string, any>): Record<string, string> {
     const result: Record<string, string> = {};
     for (const [key, value] of Object.entries(args)) {
-      if (typeof value === 'bigint') {
-        result[key] = value.toString();
-      } else if (typeof value === 'string') {
-        result[key] = value;
-      } else if (typeof value === 'object' && value !== null && 'toString' in value) {
-        result[key] = (value as any).toString();
-      } else {
-        result[key] = String(value);
-      }
+      if (typeof value === 'bigint') result[key] = value.toString();
+      else if (typeof value === 'string') result[key] = value;
+      else if (typeof value === 'object' && value !== null && 'toString' in value) result[key] = value.toString();
+      else result[key] = String(value);
     }
     return result;
   }
 
-  private identifyFunction(tx: Transaction): string {
+  private identifyFunction(tx: any): string {
     if (!tx.input || tx.input === '0x') return 'transfer';
-    // First 4 bytes of calldata = function selector
     const selector = tx.input.slice(0, 10);
     const selectors: Record<string, string> = {
       '0xa5df5779': 'deposit',
@@ -216,37 +180,21 @@ export class EvmListener {
     return selectors[selector] ?? `unknown(${selector})`;
   }
 
-  /**
-   * Get the current block number for synchronization.
-   */
   async getCurrentBlock(): Promise<bigint> {
     return this.client.getBlockNumber();
   }
 
-  /**
-   * Get a transaction receipt to check status.
-   */
   async getTxReceipt(txHash: string): Promise<TransactionReceipt | null> {
     return this.client.getTransactionReceipt({ hash: txHash as `0x${string}` });
   }
 
-  /**
-   * Get the current state of the lending pool for a user — used as
-   * the "before" snapshot for invariant evaluation.
-   */
-  async getUserStateBefore(address: Address): Promise<{
-    collateralDeposited: string;
-    debt: string;
-    collateralValue: string;
-    borrowCapacity: string;
-  }> {
+  async getUserStateBefore(address: Address): Promise<{ collateralDeposited: string; debt: string; collateralValue: string; borrowCapacity: string }> {
     const result: any = await this.client.readContract({
       address: this.config.contractAddresses.lendingPool,
       abi: parseAbi(['function getUserState(address) view returns (uint256,uint256,uint256,uint256)']),
       functionName: 'getUserState',
       args: [address],
-    });
-
+    } as any);
     return {
       collateralDeposited: result[0].toString(),
       debt: result[1].toString(),
@@ -255,37 +203,64 @@ export class EvmListener {
     };
   }
 
-  /**
-   * Get the current oracle price.
-   */
   async getOraclePrice(token: Address): Promise<string> {
     const price: any = await this.client.readContract({
       address: this.config.contractAddresses.oracle,
       abi: parseAbi(['function getPrice(address) view returns (uint256)']),
       functionName: 'getPrice',
       args: [token],
-    });
+    } as any);
     return price.toString();
   }
 
-  /**
-   * Get the current invariant status.
-   */
-  async getInvariant(): Promise<{
-    minRatioBps: string;
-    currentRatioBps: string;
-    healthy: boolean;
-  }> {
+  async getInvariant(): Promise<{ minRatioBps: string; currentRatioBps: string; healthy: boolean }> {
     const result: any = await this.client.readContract({
       address: this.config.contractAddresses.lendingPool,
       abi: parseAbi(['function getInvariant() view returns (uint256,uint256,bool)']),
       functionName: 'getInvariant',
     });
+    return { minRatioBps: result[0].toString(), currentRatioBps: result[1].toString(), healthy: result[2] };
+  }
 
-    return {
-      minRatioBps: result[0].toString(),
-      currentRatioBps: result[1].toString(),
-      healthy: result[2],
-    };
+  async isSecurityControllerEnabled(): Promise<boolean> {
+    try {
+      const result = await this.client.readContract({
+        address: this.config.contractAddresses.lendingPool,
+        abi: parseAbi(['function securityControllerEnabled() view returns (bool)']),
+        functionName: 'securityControllerEnabled',
+      });
+      return Boolean(result);
+    } catch {
+      return false;
+    }
+  }
+
+  async getSecurityController(): Promise<string> {
+    try {
+      const result = await this.client.readContract({
+        address: this.config.contractAddresses.lendingPool,
+        abi: parseAbi(['function securityController() view returns (address)']),
+        functionName: 'securityController',
+      });
+      return String(result);
+    } catch {
+      return this.config.contractAddresses.securityController;
+    }
+  }
+
+  async getPoolOwner(): Promise<string> {
+    try {
+      const result = await this.client.readContract({
+        address: this.config.contractAddresses.lendingPool,
+        abi: parseAbi(['function owner() view returns (address)']),
+        functionName: 'owner',
+      });
+      return String(result);
+    } catch {
+      return '0x0000000000000000000000000000000000000000';
+    }
   }
 }
+
+export * from './scenario-runner';
+

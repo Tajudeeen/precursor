@@ -1,0 +1,11 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js",
+  "/simulate/page": "app/simulate/page.js",
+  "/proof/page": "app/proof/page.js",
+  "/comparison/page": "app/comparison/page.js",
+  "/investigation/page": "app/investigation/page.js",
+  "/protocol/page": "app/protocol/page.js",
+  "/threats/page": "app/threats/page.js",
+  "/dashboard/page": "app/dashboard/page.js"
+}

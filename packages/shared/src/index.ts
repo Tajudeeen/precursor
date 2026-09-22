@@ -206,3 +206,194 @@ export const DefenseResultSchema = z.object({
 });
 
 export type DefenseResult = z.infer<typeof DefenseResultSchema>;
+
+// =====================================================
+// Structured Logging
+// =====================================================
+
+export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+
+export const StructuredLogSchema = z.object({
+  timestamp: z.string(),
+  level: z.enum(['DEBUG', 'INFO', 'WARN', 'ERROR']),
+  component: z.string(),
+  message: z.string(),
+  data: z.record(z.string(), z.unknown()).optional(),
+  durationMs: z.number().optional(),
+});
+
+export type StructuredLog = z.infer<typeof StructuredLogSchema>;
+
+// =====================================================
+// Attack Replay Timeline (Forensic Diff)
+// =====================================================
+
+export const TimelineSnapshotSchema = z.object({
+  oraclePrice: z.string(),
+  collateralValue: z.string(),
+  borrowCapacity: z.string(),
+  debt: z.string(),
+  invariantRatioBps: z.string(),
+  invariantHealthy: z.boolean(),
+});
+
+export type TimelineSnapshot = z.infer<typeof TimelineSnapshotSchema>;
+
+export const TimelineStepSchema = z.object({
+  stepIndex: z.number(),
+  timestamp: z.number(),
+  action: z.string(),
+  description: z.string(),
+  component: z.string(),
+  stateSnapshot: TimelineSnapshotSchema,
+  txHash: z.string().optional(),
+  eventName: z.string().optional(),
+  parameters: z.record(z.string(), z.string()).optional(),
+  delta: z.object({
+    priceChange: z.string().optional(),
+    collateralChange: z.string().optional(),
+    debtChange: z.string().optional(),
+    capacityChange: z.string().optional(),
+  }).optional(),
+});
+
+export type TimelineStep = z.infer<typeof TimelineStepSchema>;
+
+export const AttackTimelineSchema = z.object({
+  attacker: z.string(),
+  steps: z.array(TimelineStepSchema),
+  protectedOutcome: z.object({
+    blocked: z.boolean(),
+    atStep: z.number(),
+    reason: z.string(),
+  }),
+  unprotectedOutcome: z.object({
+    succeeded: z.boolean(),
+    extractedValue: z.string(),
+  }),
+});
+
+export type AttackTimeline = z.infer<typeof AttackTimelineSchema>;
+
+// =====================================================
+// Attack Economics Calculator
+// =====================================================
+
+export const AttackEconomicsSchema = z.object({
+  projectedAttackerGain: z.string(),
+  projectedProtocolLoss: z.string(),
+  projectedLiquidityDrain: z.string(),
+  actualAttackerGain: z.string(),
+  actualProtocolLoss: z.string(),
+  valueSaved: z.string(),
+  percentageSaved: z.string(),
+  defenseROI: z.string(),
+});
+
+export type AttackEconomics = z.infer<typeof AttackEconomicsSchema>;
+
+// =====================================================
+// Pipeline Health / Heartbeat
+// =====================================================
+
+export const PipelineStageHealthSchema = z.object({
+  stage: z.string(),
+  status: z.enum(['healthy', 'degraded', 'down']),
+  lastRunMs: z.number(),
+  lastRunAt: z.number(),
+  errorCount: z.number(),
+  lastError: z.string().optional(),
+});
+
+export type PipelineStageHealth = z.infer<typeof PipelineStageHealthSchema>;
+
+export const PipelineHealthSchema = z.object({
+  overall: z.enum(['operational', 'degraded', 'down']),
+  stages: z.array(PipelineStageHealthSchema),
+  uptime: z.number(),
+  startedAt: z.number(),
+  lastCheck: z.number(),
+});
+
+export type PipelineHealth = z.infer<typeof PipelineHealthSchema>;
+
+export const BenchmarkMetricsSchema = z.object({
+  ingestionLatencyMs: z.number(),
+  detectionLatencyMs: z.number(),
+  simulationLatencyMs: z.number(),
+  decisionLatencyMs: z.number(),
+  totalLatencyMs: z.number(),
+  eventsProcessed: z.number(),
+  timestamp: z.number(),
+});
+
+export type BenchmarkMetrics = z.infer<typeof BenchmarkMetricsSchema>;
+
+// =====================================================
+// Structured Logger Utility
+// =====================================================
+
+export class Logger {
+  private component: string;
+  private logs: StructuredLog[] = [];
+
+  constructor(component: string) {
+    this.component = component;
+  }
+
+  private log(level: LogLevel, message: string, data?: Record<string, unknown>, durationMs?: number): void {
+    const entry: StructuredLog = {
+      timestamp: new Date().toISOString(),
+      level,
+      component: this.component,
+      message,
+      data,
+      durationMs,
+    };
+    this.logs.push(entry);
+    const prefix = `[${entry.timestamp}] [${level}] [${this.component}]`;
+    const suffix = durationMs !== undefined ? ` (${durationMs}ms)` : '';
+    const dataStr = data ? ` ${JSON.stringify(data)}` : '';
+    if (level === 'ERROR') {
+      console.error(`${prefix} ${message}${suffix}${dataStr}`);
+    } else if (level === 'WARN') {
+      console.warn(`${prefix} ${message}${suffix}${dataStr}`);
+    } else {
+      console.log(`${prefix} ${message}${suffix}${dataStr}`);
+    }
+  }
+
+  debug(message: string, data?: Record<string, unknown>): void {
+    this.log('DEBUG', message, data);
+  }
+
+  info(message: string, data?: Record<string, unknown>, durationMs?: number): void {
+    this.log('INFO', message, data, durationMs);
+  }
+
+  warn(message: string, data?: Record<string, unknown>): void {
+    this.log('WARN', message, data);
+  }
+
+  error(message: string, data?: Record<string, unknown>): void {
+    this.log('ERROR', message, data);
+  }
+
+  time(label: string): () => number {
+    const start = performance.now();
+    return () => {
+      const elapsed = Math.round(performance.now() - start);
+      this.info(`${label} completed`, undefined, elapsed);
+      return elapsed;
+    };
+  }
+
+  getLogs(): StructuredLog[] {
+    return [...this.logs];
+  }
+
+  clear(): void {
+    this.logs = [];
+  }
+}
+

@@ -1,20 +1,37 @@
 {
   "name": "precursor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "DeFi Attack-Behavior Defense Infrastructure - V1",
+  "workspaces": [
+    "packages/shared",
+    "packages/evm",
+    "packages/behavior-engine",
+    "packages/attack-analysis",
+    "packages/simulation",
+    "packages/policy-engine",
+    "apps/api",
+    "apps/web"
+  ],
   "scripts": {
     "build": "cd packages/shared && npx tsc && cd ../evm && npx tsc && cd ../behavior-engine && npx tsc && cd ../attack-analysis && npx tsc && cd ../simulation && npx tsc && cd ../policy-engine && npx tsc && cd ../../apps/api && npx tsc",
     "test": "vitest run",
     "dev": "vitest --watch",
     "anvil": "anvil -p 8555",
-    "deploy:contracts": "cd packages/contracts && forge script Deploy.s.sol:DeployScript --rpc-url http://127.0.0.1:8555 --broadcast --private-key $DEPLOYER_KEY",
+    "deploy:contracts": "cd packages/contracts && forge script script/DeployV1.s.sol:DeployV1 --rpc-url http://127.0.0.1:8555 --broadcast --private-key $DEPLOYER_KEY",
     "test:contracts": "cd packages/contracts && forge test",
-    "dev:api": "node apps/api/dist/index.js",
-    "lint": "tsc --noEmit"
+    "dev:api": "npx tsx apps/api/src/index.ts",
+    "start:api": "node apps/api/dist/index.js",
+    "dev:web": "npm run dev --prefix apps/web",
+    "start:web": "npm run start --prefix apps/web",
+    "preview": "npm run start --prefix apps/web",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "verify": "npx tsx scripts/verify.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.9.0",
     "viem": "^2.56.5",
     "vitest": "^1.6.0",
@@ -22,6 +39,7 @@
   },
   "dependencies": {
     "@types/express": "^5.0.6",
-    "express": "^4.22.3"
+    "express": "^4.22.3",
+    "ws": "^8.21.3"
   }
 }

@@ -1,0 +1,11 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/page": "/",
+  "/simulate/page": "/simulate",
+  "/proof/page": "/proof",
+  "/comparison/page": "/comparison",
+  "/investigation/page": "/investigation",
+  "/protocol/page": "/protocol",
+  "/threats/page": "/threats",
+  "/dashboard/page": "/dashboard"
+}

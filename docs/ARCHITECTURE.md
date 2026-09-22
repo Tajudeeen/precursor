@@ -37,7 +37,7 @@
 ┌───────────────────────────────────────────────────────────┐
 │              Policy Engine (Milestone 7)                   │
 │  Map: behavior + simulation + invariant → ALLOW/REVIEW/BLOCK │
-│  Deterministic, explainable, no AI in the critical path     │
+│  Deterministic, explainable, zero heuristic drift in critical path│
 └───────────────┬───────────────────────────────────────────┘
                 │
                 ▼
