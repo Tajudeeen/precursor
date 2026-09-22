@@ -5,6 +5,9 @@ const isGitHubPages = process.env.GITHUB_PAGES === 'true';
 
 const nextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../../'),
+  env: {
+    NEXT_PUBLIC_BASE_PATH: isGitHubPages ? '/precursor' : '',
+  },
   ...(isGitHubPages
     ? {
       output: 'export',

@@ -4,6 +4,8 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 export function Footer() {
   const currentYear = 2026;
 
@@ -17,7 +19,7 @@ export function Footer() {
             <Link href="/" className="flex items-center space-x-2.5 group">
               <div className="relative w-8 h-8 rounded-lg overflow-hidden bg-[#00F5A0] dark:bg-[#D4F63D] p-1 flex items-center justify-center shadow-xs flex-shrink-0 group-hover:scale-105 transition-transform">
                 <Image
-                  src="/favicon.png"
+                  src={`${basePath}/favicon.png`}
                   alt="Precursor Logo"
                   width={32}
                   height={32}

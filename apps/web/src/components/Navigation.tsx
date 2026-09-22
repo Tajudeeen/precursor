@@ -6,6 +6,8 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { api } from '@/lib/api';
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 export function Navigation() {
   const pathname = usePathname();
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
@@ -107,7 +109,7 @@ export function Navigation() {
             <Link href="/" className="flex items-center space-x-2.5 sm:space-x-3 group">
               <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-lg overflow-hidden bg-[#D4F63D] dark:bg-[#00F5A0] p-1 flex items-center justify-center shadow-xs flex-shrink-0 group-hover:scale-105 transition-transform">
                 <Image
-                  src="/favicon.png"
+                  src={`${basePath}/favicon.png`}
                   alt="Precursor Logo"
                   width={32}
                   height={32}
@@ -276,7 +278,7 @@ export function Navigation() {
                 >
                   <div className="relative w-8 h-8 rounded-lg overflow-hidden bg-[#D4F63D] dark:bg-[#00F5A0] p-1 flex items-center justify-center shadow-xs flex-shrink-0">
                     <Image
-                      src="/favicon.png"
+                      src={`${basePath}/favicon.png`}
                       alt="Precursor Logo"
                       width={32}
                       height={32}

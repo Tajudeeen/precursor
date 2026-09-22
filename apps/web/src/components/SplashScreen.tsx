@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 export function SplashScreen() {
   const [visible, setVisible] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -64,7 +66,7 @@ export function SplashScreen() {
         <div className="flex items-center space-x-3.5 mb-4">
           <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-[#D4F63D] dark:bg-[#00F5A0] p-1 flex items-center justify-center shadow-xs flex-shrink-0">
             <Image
-              src="/favicon.png"
+              src={`${basePath}/favicon.png`}
               alt="Precursor Logo"
               width={36}
               height={36}
