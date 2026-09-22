@@ -108,8 +108,9 @@ contract LendingPoolTest is Test {
         vm.prank(attacker);
         pool.borrow(maxBorrowInitial);
 
-        // Step 3: Attacker manipulates oracle to $1.80
-        vm.prank(attacker);
+        // Step 3: The price feed moves to $1.80 (owner-only on the mock; the
+        // owner stands in for a manipulated feed)
+        vm.prank(deployer);
         oracle.setPrice(address(collateral), INFLATED_PRICE);
 
         // Step 4: Borrow capacity is now inflated to 75% of $180 = 135e18
@@ -121,25 +122,11 @@ contract LendingPoolTest is Test {
         vm.prank(attacker);
         pool.borrow(extraBorrow);
 
-        // Step 6: Withdraw all collateral (100e18)
-        // The pool has 100e18 collateral to send. Attacker gets it all.
-        uint256 collateralBefore = collateral.balanceOf(attacker);
-
-        // Projected state from simulation:
-        // collateralValue = $180 (inflated), debt = $135 (manipulated)
-        // ratio = 180/135 = 133% < 150% → VIOLATION
-        // But unprotected path doesn't check — it sends collateral anyway
-        uint256 projectedCollatValue = (COLLATERAL_DEPOSIT * INFLATED_PRICE) / 1e18;
-        uint256 projectedDebt = maxBorrowAfter;
-
+        // Step 6: Withdraw all collateral (100e18). With the controller off
+        // there is no gate at all, so the whole deposit walks out against
+        // 135e18 of debt.
         vm.prank(attacker);
-        pool.withdraw(
-            COLLATERAL_DEPOSIT,  // withdraw all deposited collateral
-            projectedCollatValue,
-            projectedDebt,
-            false,
-            0
-        );
+        pool.withdraw(COLLATERAL_DEPOSIT);
 
         // Attacker had 100e18, deposited all 100e18 (balance = 0), then withdrew 100e18
         // So balance = 100e18 (all collateral back)
@@ -166,27 +153,18 @@ contract LendingPoolTest is Test {
         vm.prank(attacker);
         pool.borrow(maxBorrowInitial);
 
-        vm.prank(attacker);
+        vm.prank(deployer);
         oracle.setPrice(address(collateral), INFLATED_PRICE);
 
         uint256 maxBorrowAfter = pool.getBorrowCapacity(attacker);
         vm.prank(attacker);
         pool.borrow(maxBorrowAfter - maxBorrowInitial);
 
-        // Step 6: withdraw — PROTECTED, simulation flags invariant violation
-        uint256 projectedCollatValue = (COLLATERAL_DEPOSIT * INFLATED_PRICE) / 1e18;
-        uint256 projectedDebt = maxBorrowAfter;
-
-        // Honest collateral value (at $1) = 100e18
-        // Simulated collateral value (at $1.80) = 180e18
-        // Debt = 135e18
-        // Simulated ratio = 180/135 = 133% < 150% → VIOLATION
-        // The controller should BLOCK because:
-        // 1. behaviorFlagged = true (oracle manipulation detected)
-        // 2. projectedCollateralValue / projectedDebt < MIN_RATIO
-
-        uint256 honestCollatValue = (COLLATERAL_DEPOSIT * INITIAL_PRICE) / 1e18;
-
+        // Step 6: withdraw — PROTECTED
+        // The attacker's real position is 100e18 collateral against 135e18 of
+        // debt. Withdrawing everything leaves 0 collateral backing that debt,
+        // so the controller derives a ratio of 0% and BLOCKS. The attacker
+        // supplies nothing but the amount — there is no argument to steer.
         vm.prank(attacker);
         vm.expectRevert(
             abi.encodeWithSignature(
@@ -194,13 +172,7 @@ contract LendingPoolTest is Test {
                 "simulation predicts invariant violation"
             )
         );
-        pool.withdraw(
-            COLLATERAL_DEPOSIT,
-            projectedCollatValue,   // 180e18 — inflated
-            projectedDebt,           // 135e18
-            true,                  // behaviorFlagged
-            85                     // behaviorConfidence
-        );
+        pool.withdraw(COLLATERAL_DEPOSIT);
 
         // Verify attacker still has their collateral in the pool (withdraw was blocked)
         (uint256 collatDeposited, , , ) = pool.getUserState(attacker);
@@ -216,27 +188,18 @@ contract LendingPoolTest is Test {
         vm.prank(victim);
         pool.deposit(COLLATERAL_DEPOSIT);
 
-        uint256 borrowAmt = 50e18;
+        uint256 borrowAmt = 30e18;
         vm.prank(victim);
         pool.borrow(borrowAmt);
 
-        // Normal withdraw — healthy invariant, behavior not flagged
-        uint256 projectedCollatValue = (COLLATERAL_DEPOSIT * INITIAL_PRICE) / 1e18; // $100
-        uint256 projectedDebt = borrowAmt; // $50
-
-        // ratio = 100/50 = 200% >= 150% → ALLOW
+        // Normal withdraw — the resulting position is 70e18 collateral against
+        // 30e18 debt = 233%, comfortably above the 170% review floor → ALLOW.
+        uint256 withdrawAmt = 30e18;
         vm.prank(victim);
-        pool.withdraw(
-            borrowAmt,  // withdraw 50e18 collateral
-            projectedCollatValue,
-            projectedDebt - borrowAmt,  // debt after repaying = 0
-            false,
-            0
-        );
+        pool.withdraw(withdrawAmt);
 
-        // Attacker (victim in this case) should have received collateral back
-        (,, uint256 collatDeposited,) = pool.getUserState(victim);
-        assertEq(collatDeposited, COLLATERAL_DEPOSIT - borrowAmt,
+        (uint256 collatDeposited, , , ) = pool.getUserState(victim);
+        assertEq(collatDeposited, COLLATERAL_DEPOSIT - withdrawAmt,
             "Collateral reduced by withdrawal amount");
     }
 
@@ -264,72 +227,83 @@ contract LendingPoolTest is Test {
     function testControllerAllowsHealthyInvariant() public {
         _deployController();
 
-        // ratio = 100/50 = 200% >= 150% → Allow
+        vm.prank(attacker);
+        collateral.approve(address(pool), COLLATERAL_DEPOSIT);
+        vm.prank(attacker);
+        pool.deposit(COLLATERAL_DEPOSIT);
+        vm.prank(attacker);
+        pool.borrow(50e18);
+
+        // 90e18 collateral against 50e18 debt = 180% >= 170% → Allow
         vm.prank(address(pool));
         (SecurityController.Decision decision, , uint256 ratioBps) =
-            controller.evaluateDefenseExternal(
-                attacker,
-                50e18,
-                100e18,   // $100 collateral value
-                50e18,    // $50 debt
-                block.timestamp
-            );
-        assertGe(ratioBps, 15000);
+            controller.evaluateWithdraw(attacker, 10e18);
+        assertEq(ratioBps, 18000);
         assertEq(uint256(decision), uint256(SecurityController.Decision.Allow));
     }
 
     function testControllerBlocksViolatedInvariant() public {
         _deployController();
 
-        // ratio = 100/75 = 133% < 150% → Block
+        vm.prank(attacker);
+        collateral.approve(address(pool), COLLATERAL_DEPOSIT);
+        vm.prank(attacker);
+        pool.deposit(COLLATERAL_DEPOSIT);
+        vm.prank(attacker);
+        pool.borrow(75e18);
+
+        // 70e18 collateral against 75e18 debt = 93% < 150% → Block
         vm.prank(address(pool));
         (SecurityController.Decision decision, , uint256 ratioBps) =
-            controller.evaluateDefenseExternal(
-                attacker,
-                75e18,
-                100e18,  // $100 collateral value
-                75e18,   // $75 debt
-                block.timestamp
-            );
-        assertLt(ratioBps, 15000);
+            controller.evaluateWithdraw(attacker, 30e18);
+        assertEq(ratioBps, 9333);
         assertEq(uint256(decision), uint256(SecurityController.Decision.Block));
     }
 
-    function testControllerWithBehaviorFlagAmplifiesBlock() public {
+    /// The gate judges the position *after* the withdrawal, not the one that
+    /// exists when the call arrives. Here the standing position is fine
+    /// (100/65 = 153%) but the withdrawal drops it to 138% → Block.
+    function testControllerJudgesPostWithdrawalState() public {
         _deployController();
 
-        // Even at 142% (which would be REVIEW without behavior flag),
-        // behavior flag + confidence > 70 → Block
+        vm.prank(attacker);
+        collateral.approve(address(pool), COLLATERAL_DEPOSIT);
+        vm.prank(attacker);
+        pool.deposit(COLLATERAL_DEPOSIT);
+        vm.prank(attacker);
+        pool.borrow(65e18);
+
         vm.prank(address(pool));
-        (SecurityController.Decision decision, , ) =
-            controller.evaluateDefenseWithBehaviorEvidence(
-                attacker,
-                70e18,
-                100e18,  // $100 honest collateral
-                70e18,   // $70 debt → ratio = 142%
-                true,    // behaviorFlagged
-                85,      // confidence
-                block.timestamp
-            );
+        (SecurityController.Decision decision, , uint256 ratioBps) =
+            controller.evaluateWithdraw(attacker, 10e18);
+        assertEq(ratioBps, 13846);
         assertEq(uint256(decision), uint256(SecurityController.Decision.Block));
     }
 
-    function testControllerReviewAtBorderlineWithoutFlag() public {
+    /// The controller refuses to answer anyone but the pool it guards.
+    function testControllerRejectsUnprotectedCaller() public {
         _deployController();
 
-        // ratio = 165% — between 150% and 170% → Review
-        // 100/60 = 166.6% → Review
+        vm.prank(attacker);
+        vm.expectRevert(SecurityController.NotProtected.selector);
+        controller.evaluateWithdraw(attacker, 1e18);
+    }
+
+    function testControllerReviewAtBorderline() public {
+        _deployController();
+
+        vm.prank(attacker);
+        collateral.approve(address(pool), COLLATERAL_DEPOSIT);
+        vm.prank(attacker);
+        pool.deposit(COLLATERAL_DEPOSIT);
+        vm.prank(attacker);
+        pool.borrow(50e18);
+
+        // 80e18 collateral against 50e18 debt = 160%, between 150% and 170% → Review
         vm.prank(address(pool));
         (SecurityController.Decision decision, , uint256 ratioBps) =
-            controller.evaluateDefenseExternal(
-                attacker,
-                60e18,
-                100e18,
-                60e18,
-                block.timestamp
-            );
-        assertGe(ratioBps, 15000);
-        assertLt(ratioBps, 17000);
+            controller.evaluateWithdraw(attacker, 20e18);
+        assertEq(ratioBps, 16000);
         assertEq(uint256(decision), uint256(SecurityController.Decision.Review));
     }
 }

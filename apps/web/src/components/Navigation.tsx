@@ -136,11 +136,10 @@ export function Navigation() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`px-2.5 lg:px-3.5 py-1 text-[11px] lg:text-xs font-medium rounded-full transition-all whitespace-nowrap ${
-                    active
+                  className={`px-2.5 lg:px-3.5 py-1 text-[11px] lg:text-xs font-medium rounded-full transition-all whitespace-nowrap ${active
                       ? 'bg-[#111215] text-white dark:bg-white/[0.12] dark:text-white shadow-xs font-semibold'
                       : 'text-[#33332D] dark:text-slate-300 hover:text-[#111215] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
-                  }`}
+                    }`}
                 >
                   {link.label}
                 </Link>
@@ -235,11 +234,10 @@ export function Navigation() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-3 py-1 text-xs whitespace-nowrap rounded-full transition-all font-medium ${
-                  active
+                className={`px-3 py-1 text-xs whitespace-nowrap rounded-full transition-all font-medium ${active
                     ? 'bg-[#111215] text-white dark:bg-white/20 dark:text-white font-semibold shadow-xs'
                     : 'text-[#44443E] dark:text-slate-300 hover:text-[#111215] dark:hover:text-white bg-black/5 dark:bg-white/5'
-                }`}
+                  }`}
               >
                 {link.label}
               </Link>
@@ -316,11 +314,10 @@ export function Navigation() {
                       key={link.href}
                       href={link.href}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                        active
+                      className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${active
                           ? 'bg-[#111215] dark:bg-white/[0.12] text-white font-semibold shadow-xs'
                           : 'text-[#33332D] dark:text-slate-200 hover:text-[#111215] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
-                      }`}
+                        }`}
                     >
                       <span>{link.label}</span>
                       {active && (

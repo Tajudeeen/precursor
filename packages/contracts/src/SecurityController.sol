@@ -4,23 +4,31 @@ pragma solidity ^0.8.20;
 import { MockOracle } from "./MockOracle.sol";
 import { ControlledCollateral } from "./ControlledCollateral.sol";
 
+/// @dev The minimal view surface the controller needs from the protocol it
+///      guards. Every value the verdict depends on is read from here — never
+///      from the caller's arguments.
 interface IProtectedLendingPool {
     function userDebt(address user) external view returns (uint256);
+
+    function userCollateral(address user) external view returns (uint256);
 }
 
 /// @title SecurityController — a narrow, opt-in gate that the LendingPool
 ///       calls before critical operations (withdraw, borrow). The controller
-///       delegates to an external policy contract for the ALLOW/REVIEW/BLOCK
-///       decision. The LendingPool grants this authority explicitly.
+///       holds the ALLOW/REVIEW/BLOCK policy itself and reads the state it
+///       judges from the chain. The LendingPool grants this authority
+///       explicitly and is the only address allowed to ask for a verdict.
 ///
 /// @notice Trust model: the protected protocol voluntarily integrates this
 ///         controller for a single operation (withdrawal). The controller can
 ///         not custody assets or move funds on its own — it only returns a
 ///         verdict that the LendingPool respects.
 ///
-/// @dev For V1 the policy is a simple in-memory set of rules evaluated against
-///      the current behavioral evidence and simulation result. The policy
-///      decision is deterministic and fully on-chain verifiable.
+/// @dev The caller supplies exactly two things: *who* is withdrawing and *how
+///      much*. Everything the decision depends on — the caller's collateral
+///      balance, their debt, and the collateral price — is read from
+///      `protectedProtocol` and `oracle` inside this contract. There is no
+///      parameter a caller can set to steer the verdict.
 contract SecurityController {
     MockOracle public immutable oracle;
     ControlledCollateral public immutable collateral;
@@ -29,9 +37,13 @@ contract SecurityController {
     address public immutable protectedProtocol;
 
     // The protocol-wide collateralization invariant:
-    //   collateralValue >= debtValue * MIN_COLLATERAL_RATIO
+    //   remainingCollateralValue >= debtValue * MIN_COLLATERAL_RATIO
     // MIN_COLLATERAL_RATIO is 150% = 15000 basis points.
     uint256 public constant MIN_COLLATERAL_RATIO_BPS = 15000; // 150%
+
+    // Withdrawals landing between MIN and MIN + REVIEW_BAND are close enough to
+    // the threshold to warrant a human look rather than a silent pass.
+    uint256 public constant REVIEW_BAND_BPS = 2000; // 150% .. 170%
 
     enum Decision { Allow, Review, Block }
 
@@ -61,6 +73,7 @@ contract SecurityController {
         address _protectedProtocol,
         address _policy
     ) {
+        if (_protectedProtocol == address(0)) revert NotProtected();
         oracle = MockOracle(_oracle);
         collateral = ControlledCollateral(_collateral);
         protectedProtocol = _protectedProtocol;
@@ -68,55 +81,63 @@ contract SecurityController {
     }
 
     /// @notice Core enforcement hook. The LendingPool calls this before
-    ///         processing a withdraw(borrow) request. The controller
-    ///         evaluates the invariant against the *projected* state after
-    ///         the withdrawal and returns a verdict.
+    ///         processing a withdrawal. The controller derives the
+    ///         post-withdrawal position from live chain state and evaluates
+    ///         the collateralization invariant against it.
     ///
-    /// @param attacker          The address requesting the withdrawal.
-    /// @param borrowAmount      Amount of borrowable asset being withdrawn.
-    /// @param projectedCollateralValue  Oracle price * collateral balance
-    ///                                    after the attacker's full sequence
-    ///                                    (as computed by the off-chain
-    ///                                    simulation engine and passed in).
-    /// @param projectedDebtValue  Total debt after the withdrawal.
-    /// @return decision         Allow / Review / Block
-    /// @return reason           Human-readable justification
+    /// @param user           The address whose collateral is leaving.
+    /// @param withdrawAmount Amount of collateral tokens being withdrawn.
+    /// @return decision     Allow / Review / Block
+    /// @return reason       Human-readable justification
     /// @return collateralRatioBps  The computed ratio (collateral/debt * 10000)
-    function evaluateDefense(
-        address attacker,
-        uint256 borrowAmount,
-        uint256 projectedCollateralValue,
-        uint256 projectedDebtValue,
-        uint256 currentTimestamp
+    function evaluateWithdraw(
+        address user,
+        uint256 withdrawAmount
     )
-        internal
+        external
         view
+        onlyProtected
         returns (
             Decision decision,
             string memory reason,
             uint256 collateralRatioBps
         )
     {
-        // Invariant check: if projected collateral value / debt < threshold,
-        // the withdrawal would push the protocol below minimum collateralization.
-        if (projectedDebtValue == 0) {
+        IProtectedLendingPool pool = IProtectedLendingPool(protectedProtocol);
+
+        uint256 heldCollateral = pool.userCollateral(user);
+        uint256 debt = pool.userDebt(user);
+        uint256 price = oracle.getPrice(address(collateral));
+
+        // The pool checks this before calling, but a gate must not depend on
+        // its caller having done so.
+        if (withdrawAmount > heldCollateral) {
+            return (
+                Decision.Block,
+                "withdrawal exceeds on-chain collateral balance",
+                0
+            );
+        }
+
+        uint256 remainingValue = ((heldCollateral - withdrawAmount) * price) /
+            1e18;
+
+        // Nothing owed → nothing to under-collateralize.
+        if (debt == 0) {
             return (Decision.Allow, "no debt exposure", 0);
         }
 
-        collateralRatioBps = (projectedCollateralValue * 10_000) /
-            projectedDebtValue;
+        collateralRatioBps = (remainingValue * 10_000) / debt;
 
         if (collateralRatioBps < MIN_COLLATERAL_RATIO_BPS) {
-            // Simulated state would violate the invariant → BLOCK
             return (
                 Decision.Block,
-                "simulation predicts invariant violation: collateral ratio below minimum",
+                "post-withdrawal collateral ratio below minimum",
                 collateralRatioBps
             );
         }
 
-        if (collateralRatioBps < MIN_COLLATERAL_RATIO_BPS + 2000) {
-            // Between 150% and 170% — close to threshold → REVIEW
+        if (collateralRatioBps < MIN_COLLATERAL_RATIO_BPS + REVIEW_BAND_BPS) {
             return (
                 Decision.Review,
                 "collateral ratio approaching minimum threshold",
@@ -125,105 +146,6 @@ contract SecurityController {
         }
 
         return (Decision.Allow, "collateral ratio healthy", collateralRatioBps);
-    }
-
-    /// @notice Public wrapper for external callers (tests, off-chain engines).
-    function evaluateDefenseExternal(
-        address attacker,
-        uint256 borrowAmount,
-        uint256 projectedCollateralValue,
-        uint256 projectedDebtValue,
-        uint256 currentTimestamp
-    )
-        external
-        view
-        onlyProtected
-        returns (
-            Decision decision,
-            string memory reason,
-            uint256 collateralRatioBps
-        )
-    {
-        return
-            evaluateDefense(
-                attacker,
-                borrowAmount,
-                projectedCollateralValue,
-                projectedDebtValue,
-                currentTimestamp
-            );
-    }
-
-    /// @notice In V1 the simulation is off-chain. The LendingPool passes
-    ///         the projected values that the behavior engine + simulation
-    ///         engine computed. For the protected demo, the controller
-    ///         receives the *simulated* (attacker-inflated) collateral value
-    ///         and detects the invariant violation.
-    ///
-    ///         The unprotected run simply never calls this controller.
-    function evaluateDefenseWithBehaviorEvidence(
-        address attacker,
-        uint256 borrowAmount,
-        uint256 projectedCollateralValue,
-        uint256 projectedDebtValue,
-        bool behaviorFlagged,
-        uint256 behaviorConfidence,
-        uint256 currentTimestamp
-    )
-        external
-        view
-        onlyProtected
-        returns (
-            Decision decision,
-            string memory reason,
-            uint256 collateralRatioBps
-        )
-    {
-        // If behavior engine flagged the sequence AND simulation shows
-        // invariant violation, block deterministically.
-        if (behaviorFlagged && behaviorConfidence >= 70) {
-            uint256 actualDebt = 0;
-            if (protectedProtocol != address(0)) {
-                try IProtectedLendingPool(protectedProtocol).userDebt(attacker) returns (uint256 d) {
-                    actualDebt = d;
-                } catch {}
-            }
-
-            // Evasion defense: An attacker who has an active on-chain debt obligation cannot claim 0 debt or lower debt
-            if (actualDebt > 0 && projectedDebtValue < actualDebt) {
-                return (
-                    Decision.Block,
-                    "behavior-flagged sequence + evasion: projected debt cannot be lower than on-chain debt",
-                    0
-                );
-            }
-
-            // Run the same invariant check — behavior flag raises
-            // sensitivity threshold but final call is on the invariant.
-            if (projectedDebtValue == 0) {
-                return (Decision.Allow, "no debt exposure", 0);
-            }
-            collateralRatioBps = (projectedCollateralValue * 10_000) /
-                projectedDebtValue;
-
-            if (collateralRatioBps < MIN_COLLATERAL_RATIO_BPS) {
-                return (
-                    Decision.Block,
-                    "behavior-flagged sequence + invariant violation",
-                    collateralRatioBps
-                );
-            }
-        }
-
-        // Fall through to standard invariant check.
-        return
-            evaluateDefense(
-                attacker,
-                borrowAmount,
-                projectedCollateralValue,
-                projectedDebtValue,
-                currentTimestamp
-            );
     }
 
     error NotProtected();

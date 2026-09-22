@@ -167,10 +167,13 @@ export class EvmListener {
   private identifyFunction(tx: any): string {
     if (!tx.input || tx.input === '0x') return 'transfer';
     const selector = tx.input.slice(0, 10);
+    // Hand-maintained. Keep in step with the contract ABIs — a stale entry
+    // silently degrades identification to `unknown(0x...)` rather than failing
+    // loudly. Regenerate with `cast sig '<signature>'`.
     const selectors: Record<string, string> = {
       '0xa5df5779': 'deposit',
       '0xf6c1113b': 'borrow',
-      '0x0b9b062d': 'withdraw',
+      '0x2e1a7d4d': 'withdraw', // withdraw(uint256)
       '0x3dc4d7c2': 'setPrice',
       '0x5b9091d7': 'setSecurityController',
       '0xdcec3523': 'disableSecurityController',

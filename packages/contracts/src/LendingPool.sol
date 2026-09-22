@@ -103,39 +103,19 @@ contract LendingPool {
     ///         is based on oracle price, so after price manipulation the
     ///         attacker can borrow more and still withdraw full collateral.
     ///
-    /// @dev When the SecurityController is enabled, the caller provides
-    ///      projected/simulated state values. The controller checks the
-    ///      invariant and may BLOCK the withdrawal.
+    /// @dev The caller supplies only the amount. When the SecurityController
+    ///      is enabled it derives the resulting position from on-chain state
+    ///      and may BLOCK or REVIEW the withdrawal. Nothing the caller passes
+    ///      can move the verdict.
     ///
     /// @param withdrawAmount  Amount of collateral tokens to send back.
-    /// @param projectedCollateralValue  Simulated collateral value after full sequence.
-    /// @param projectedDebtValue        Simulated debt after full sequence.
-    /// @param behaviorFlagged           Whether the behavior engine flagged this.
-    /// @param behaviorConfidence        Confidence score 0-100.
-    function withdraw(
-        uint256 withdrawAmount,
-        uint256 projectedCollateralValue,
-        uint256 projectedDebtValue,
-        bool behaviorFlagged,
-        uint256 behaviorConfidence
-    ) external {
+    function withdraw(uint256 withdrawAmount) external {
         // VULNERABLE: no invariant check here when unprotected
         if (withdrawAmount > userCollateral[msg.sender]) revert InsufficientCollateral();
 
         if (securityControllerEnabled) {
-            (
-                SecurityController.Decision decision,
-                ,
-                uint256 ratioBps
-            ) = securityController.evaluateDefenseWithBehaviorEvidence(
-                msg.sender,
-                withdrawAmount,
-                projectedCollateralValue,
-                projectedDebtValue,
-                behaviorFlagged,
-                behaviorConfidence,
-                block.timestamp
-            );
+            (SecurityController.Decision decision, , ) = securityController
+                .evaluateWithdraw(msg.sender, withdrawAmount);
 
             if (decision == SecurityController.Decision.Block) {
                 revert WithdrawBlocked("simulation predicts invariant violation");

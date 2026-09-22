@@ -147,7 +147,7 @@ export function Footer() {
             <ul className="space-y-2 text-xs font-sans">
               <li>
                 <a
-                  href="https://github.com/tajudeen-isah/precursor"
+                  href="https://github.com/Tajudeeen/precursor"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-slate-300 hover:text-white dark:text-[#111215] dark:hover:underline transition-colors inline-flex items-center gap-1.5 font-medium"

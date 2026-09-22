@@ -141,8 +141,9 @@ Policy engine:
   - Decision: BLOCK
 
 On-chain:
-  → withdraw() → SecurityController.evaluateDefenseWithBehaviorEvidence()
-    → returns Block("behavior-flagged sequence + invariant violation")
+  → withdraw(amount) → SecurityController.evaluateWithdraw(user, amount)
+    → reads userCollateral(user), userDebt(user) and oracle.getPrice() itself
+      (collateral 0 after full withdrawal, debt 135e18) → ratio 0% → Block
     → withdraw reverts
 
 Result: Attacker's collateral remains in the pool. Attack blocked.
@@ -150,7 +151,7 @@ Result: Attacker's collateral remains in the pool. Attack blocked.
 
 ## Key Design Decisions
 
-1. **Simulation is off-chain, decision is on-chain.** The Anvil fork runs the simulation and returns projected state values. The SecurityController makes the final BLOCK decision on-chain, where it's verifiable and deterministic.
+1. **Simulation is off-chain, decision is on-chain.** The behavior engine and simulator raise the alarm off-chain. The SecurityController makes the final BLOCK decision on-chain from state it reads itself, where it's verifiable and deterministic and cannot be steered by the caller's arguments.
 
 2. **Oracle manipulation is the vulnerability.** The MockOracle has no TWAP or guards. This is the deliberate attack surface for V1.
 

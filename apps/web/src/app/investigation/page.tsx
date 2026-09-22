@@ -114,7 +114,7 @@ export default function InvestigationPage() {
               {whatSystemDid.reason || 'Simulation predicts invariant violation'}
             </h2>
             <p className="text-xs text-[#4A4D40] dark:text-slate-300 font-mono mt-1">
-              Deterministic on-chain revert enforced via <code className="px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/[0.08] text-[#111215] dark:text-[#00F5A0]">SecurityController.evaluateDefenseWithBehaviorEvidence()</code>
+              Deterministic on-chain revert enforced via <code className="px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/[0.08] text-[#111215] dark:text-[#00F5A0]">SecurityController.evaluateWithdraw()</code>
             </p>
           </div>
           <div className="flex items-center space-x-2 shrink-0">

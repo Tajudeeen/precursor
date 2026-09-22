@@ -25,7 +25,7 @@ import {
 const LENDING_POOL_ABI: any = [
   { type: 'function', name: 'deposit', inputs: [{ type: 'uint256', name: 'amount' }], outputs: [] },
   { type: 'function', name: 'borrow', inputs: [{ type: 'uint256', name: 'amount' }], outputs: [] },
-  { type: 'function', name: 'withdraw', inputs: [{ type: 'uint256', name: 'withdrawAmount' }, { type: 'uint256', name: 'projectedCollateralValue' }, { type: 'uint256', name: 'projectedDebtValue' }, { type: 'bool', name: 'behaviorFlagged' }, { type: 'uint256', name: 'behaviorConfidence' }], outputs: [] },
+  { type: 'function', name: 'withdraw', inputs: [{ type: 'uint256', name: 'withdrawAmount' }], outputs: [] },
   { type: 'function', name: 'disableSecurityController', inputs: [], outputs: [] },
   { type: 'function', name: 'setSecurityController', inputs: [{ type: 'address', name: '_controller' }], outputs: [] },
   { type: 'function', name: 'securityController', inputs: [], outputs: [{ type: 'address' }], stateMutability: 'view' },
@@ -204,9 +204,12 @@ export async function runUnprotected(config: Config): Promise<ScenarioResult> {
   );
   txs.push({ step: 4, description: 'Borrow 75e18 at $1', txHash: borrowRes.hash, status: borrowRes.status });
 
-  // Step 5: Manipulate oracle to $1.80
+  // Step 5: Move the oracle to $1.80.
+  // setPrice is owner-only on MockOracle, so this is sent from the deployer
+  // account — standing in for a manipulated price feed. The pool's
+  // vulnerability is that it trusts a single spot price at all.
   const priceRes = await sendAndWait(
-    attacker, config.oracle,
+    deployer, config.oracle,
     ORACLE_ABI,
     'setPrice', [config.collateral as `0x${string}`, INFLATED_PRICE]
   );
@@ -228,11 +231,10 @@ export async function runUnprotected(config: Config): Promise<ScenarioResult> {
   txs.push({ step: 6, description: `Borrow ${extraBorrow} more at inflated price`, txHash: extraBorrowRes.hash, status: extraBorrowRes.status });
 
   // Step 7: Withdraw all collateral (UNPROTECTED — no controller)
-  const projectedCollatValue = (COLLATERAL_DEPOSIT * INFLATED_PRICE) / 10n ** 18n;
   const withdrawRes = await sendAndWait(
     attacker, config.lendingPool,
     LENDING_POOL_ABI,
-    'withdraw', [COLLATERAL_DEPOSIT, projectedCollatValue, BigInt(cap), false, 0]
+    'withdraw', [COLLATERAL_DEPOSIT]
   );
   txs.push({ step: 7, description: 'Withdraw all collateral (UNPROTECTED)', txHash: withdrawRes.hash, status: withdrawRes.status });
 
@@ -314,9 +316,10 @@ export async function runProtected(config: Config): Promise<ScenarioResult> {
   );
   txs.push({ step: 4, description: 'Borrow 75e18 at $1', txHash: borrowRes.hash, status: borrowRes.status });
 
-  // Step 4: Manipulate oracle
+  // Step 4: Move the oracle (owner-only; the deployer is the oracle owner and
+  // stands in for a manipulated feed)
   const priceRes = await sendAndWait(
-    attacker, config.oracle,
+    deployer, config.oracle,
     ORACLE_ABI,
     'setPrice', [config.collateral as `0x${string}`, INFLATED_PRICE]
   );
@@ -338,11 +341,10 @@ export async function runProtected(config: Config): Promise<ScenarioResult> {
   txs.push({ step: 6, description: 'Borrow extra at inflated price', txHash: extraBorrowRes.hash, status: extraBorrowRes.status });
 
   // Step 7: Withdraw — PROTECTED (controller armed)
-  const projectedCollatValue = (COLLATERAL_DEPOSIT * INFLATED_PRICE) / 10n ** 18n;
   const withdrawRes = await sendAndWait(
     attacker, config.lendingPool,
     LENDING_POOL_ABI,
-    'withdraw', [COLLATERAL_DEPOSIT, projectedCollatValue, BigInt(cap), true, 85]
+    'withdraw', [COLLATERAL_DEPOSIT]
   );
   txs.push({
     step: 7,
@@ -526,7 +528,6 @@ export async function executeSingleStep(
 ): Promise<StepExecutionResult> {
   const deployer = makeClient(config, config.deployerKey);
   const attacker = makeClient(config, config.attackerKey);
-  const pub = makePublicClient(config);
 
   let txHash = '0x' + '0'.repeat(64);
   let status: 'success' | 'revert' = 'success';
@@ -553,8 +554,10 @@ export async function executeSingleStep(
     case 'skew-oracle': {
       const priceToSet = customPrice ? parseEther(customPrice) : INFLATED_PRICE;
       const formattedPrice = customPrice ? `$${customPrice}` : '$1.80';
-      description = `Manipulate MockOracle spot price to ${formattedPrice}`;
-      const res = await sendAndWait(attacker, config.oracle, ORACLE_ABI, 'setPrice', [config.collateral, priceToSet]);
+      description = `Move MockOracle spot price to ${formattedPrice}`;
+      // Owner-only on MockOracle — sent from the deployer, which stands in for
+      // a manipulated price feed.
+      const res = await sendAndWait(deployer, config.oracle, ORACLE_ABI, 'setPrice', [config.collateral, priceToSet]);
       txHash = res.hash;
       status = res.status;
       break;
@@ -567,22 +570,14 @@ export async function executeSingleStep(
       break;
     }
     case 'withdraw': {
-      // In terminal state of this exploit, attacker attempts to withdraw all 100 DCC collateral,
-      // leaving 0 collateral backing their 135 DCC debt.
-      const userState: any = await pub.readContract({
-        address: config.lendingPool,
-        abi: LENDING_POOL_ABI,
-        functionName: 'getUserState',
-        args: [attacker.account.address],
-      });
-      const activeDebt = userState[1] > 0n ? userState[1] : 135n * 10n ** 18n;
-      // After extracting full collateral, remaining collateral value is 0
-      const projectedRemainingCollatValue = 0n;
-
+      // Terminal step of the exploit: the attacker tries to pull all 100 DCC
+      // collateral out, leaving 0 collateral backing their 135 DCC debt.
+      // withdraw() takes only an amount — the SecurityController reads the
+      // collateral, debt and price from chain state itself.
       if (mode === 'unprotected') {
         description = 'Withdraw 100 DCC collateral (UNPROTECTED — SecurityController bypassed)';
         await sendAndWait(deployer, config.lendingPool, LENDING_POOL_ABI, 'disableSecurityController', []);
-        const res = await sendAndWait(attacker, config.lendingPool, LENDING_POOL_ABI, 'withdraw', [COLLATERAL_DEPOSIT, projectedRemainingCollatValue, activeDebt, false, 0]);
+        const res = await sendAndWait(attacker, config.lendingPool, LENDING_POOL_ABI, 'withdraw', [COLLATERAL_DEPOSIT]);
         txHash = res.hash;
         status = res.status;
         if (status === 'success') {
@@ -592,7 +587,7 @@ export async function executeSingleStep(
         description = 'Withdraw 100 DCC collateral (PROTECTED — SecurityController armed)';
         const controllerAddr = await getControllerAddress(config, deployer);
         await sendAndWait(deployer, config.lendingPool, LENDING_POOL_ABI, 'setSecurityController', [controllerAddr as `0x${string}`]);
-        const res = await sendAndWait(attacker, config.lendingPool, LENDING_POOL_ABI, 'withdraw', [COLLATERAL_DEPOSIT, projectedRemainingCollatValue, activeDebt, true, 85]);
+        const res = await sendAndWait(attacker, config.lendingPool, LENDING_POOL_ABI, 'withdraw', [COLLATERAL_DEPOSIT]);
         txHash = res.hash;
         status = res.status;
         if (status === 'revert') {

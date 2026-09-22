@@ -62,16 +62,14 @@ contract AttackScenarioRunner is Script {
 
         // 7. Attempt withdrawal — EXPECTED TO REVERT (defense works)
         console.log("7. Attempting withdrawal (expected: BLOCKED)...");
-        // Use low-level call to catch the revert without failing the broadcast
+        // Use low-level call to catch the revert without failing the broadcast.
+        // withdraw() takes only an amount: the controller derives the position
+        // from chain state, so there is no argument that could flatter it.
         bytes memory withdrawData = abi.encodeWithSelector(
             pool.withdraw.selector,
-            100 ether,       // withdrawAmount
-            180 ether,       // projectedCollateralValue
-            135 ether,       // projectedDebtValue
-            true,            // behaviorFlagged
-            90               // behaviorConfidence
+            100 ether        // withdrawAmount
         );
-        (bool success, bytes memory returnData) = address(pool).call(withdrawData);
+        (bool success, ) = address(pool).call(withdrawData);
         if (!success) {
             console.log("   Withdrawal BLOCKED (reverted as expected)");
         } else {

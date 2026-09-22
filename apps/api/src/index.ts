@@ -382,7 +382,7 @@ app.get('/api/protocol', async (_req: Request, res: Response) => {
         owner: poolOwner,
         securityControllerEnabled: controllerEnabled,
         activeController,
-        protectedOperation: 'withdraw(uint256,uint256,uint256,bool,uint256)',
+        protectedOperation: 'withdraw(uint256)',
         borrowFactor: '75%',
         liquidationThreshold: '150%',
       },
@@ -689,7 +689,7 @@ app.get('/api/proof', async (_req: Request, res: Response) => {
         id: 'NEG-PROOF-01',
         title: 'Unauthorized Controller Invocation',
         targetContract: config.contractAddresses.securityController,
-        description: 'Direct call to evaluateDefenseExternal() by arbitrary caller reverts with NotProtected()',
+        description: 'Direct call to evaluateWithdraw() by arbitrary caller reverts with NotProtected()',
         expectedError: 'NotProtected()',
         actualResult: 'REVERT_VERIFIED',
         status: 'VERIFIED',
@@ -719,8 +719,8 @@ app.get('/api/proof', async (_req: Request, res: Response) => {
 
     const knownLimitations = [
       {
-        area: 'Simulation Caller Scope',
-        disclosure: 'In the V1 demo, projected values are supplied during the keeper-assisted withdrawal. V2 requires an EIP-712 cryptographic signature from Precursor validator watchdogs.',
+        area: 'Off-Chain Evidence Binding',
+        disclosure: 'The on-chain gate derives the position from chain state and cannot be steered by a caller. The behavior engine and simulator that raise the initial alarm run off-chain and are not yet cryptographically bound to the on-chain decision — V2 requires an EIP-712 attestation from Precursor validator watchdogs so the gate can act on evidence it can verify.',
         riskLevel: 'MEDIUM (POC SCOPE)',
       },
       {
@@ -898,6 +898,7 @@ async function runDefenseLoop(): Promise<DefenseResult> {
     : {
       action: 'BLOCK' as const,
       reason: 'SIMULATION UNAVAILABLE — fail-safe BLOCK',
+      targetOperation: 'withdraw(uint256)',
       projectedCollateralValue: '0',
       projectedDebtValue: '0',
       behaviorFlagged: true,

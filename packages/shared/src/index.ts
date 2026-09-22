@@ -176,12 +176,23 @@ export const PolicyDecisionSchema = z.object({
 export type PolicyDecision = z.infer<typeof PolicyDecisionSchema>;
 
 /**
- * Defense action sent to the on-chain controller.
+ * The off-chain defense verdict, plus the evidence it was reached on.
+ *
+ * NOTE: none of these fields are passed to the on-chain SecurityController.
+ * `withdraw(uint256)` takes only an amount; the controller reads collateral,
+ * debt and price from the chain itself. The values below are the *off-chain*
+ * simulation's view of the position, recorded so the decision can be reviewed
+ * and audited — they are evidence, not inputs, and a caller cannot steer the
+ * on-chain verdict with them.
  */
 export const DefenseActionSchema = z.object({
   action: z.enum(['ALLOW', 'REVIEW', 'BLOCK']),
   reason: z.string(),
+  /** The on-chain operation this verdict applies to. */
+  targetOperation: z.string(),
+  /** Off-chain simulation output: projected collateral value after the sequence. */
   projectedCollateralValue: z.string(),
+  /** Off-chain simulation output: TOTAL projected debt after the sequence. */
   projectedDebtValue: z.string(),
   behaviorFlagged: z.boolean(),
   behaviorConfidence: z.number(),

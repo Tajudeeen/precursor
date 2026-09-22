@@ -17,7 +17,9 @@ Lending protocols will not accept external contracts having unilateral custody o
 2. Direct custody proxy: Too intrusive; unacceptably high governance barrier.
 
 ### Consequence
-The protected protocol explicitly invokes `securityController.evaluateDefenseWithBehaviorEvidence()` during withdrawal requests.
+The protected protocol explicitly invokes `securityController.evaluateWithdraw(user, amount)` during withdrawal requests. The controller supplies the two things only the caller knows — who is withdrawing and how much — and derives everything the verdict depends on (collateral balance, debt, oracle price) from chain state.
+
+**Revised 2026-09-22:** the original design passed projected collateral/debt values computed off-chain as arguments to `withdraw()`. That made the gate's verdict a function of caller-supplied numbers, so it could be defeated by passing safe-looking values (audit finding C-1). `withdraw(uint256)` now takes only an amount.
 
 ---
 

@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import { MockOracle } from "./MockOracle.sol";
 
 /// @title ControlledCollateral — a simple ERC20 used as collateral in the
-///       lending pool. Has mint/burn for test setup.
+///       lending pool. Has owner-only mint/burn for test setup.
 contract ControlledCollateral {
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
@@ -14,10 +14,24 @@ contract ControlledCollateral {
     uint8 public immutable decimals = 18;
     uint256 public totalSupply;
 
+    address public immutable owner;
+
     event Mint(address to, uint256 amount);
     event Burn(address from, uint256 amount);
 
-    function mint(address to, uint256 amount) external {
+    constructor() {
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    /// @dev Minting is setup infrastructure, not a protocol feature a caller may
+    ///      reach. Left unrestricted, any address could conjure unlimited
+    ///      collateral and every "protected" scenario would prove nothing.
+    function mint(address to, uint256 amount) external onlyOwner {
         balanceOf[to] += amount;
         totalSupply += amount;
         emit Mint(to, amount);
@@ -64,4 +78,5 @@ contract ControlledCollateral {
 
     error InsufficientBalance();
     error InsufficientAllowance();
+    error NotOwner();
 }

@@ -144,12 +144,23 @@ export class PolicyEngine {
   }
 
   /**
-   * Convert a PolicyDecision into a DefenseAction that the API layer
-   * sends to the on-chain SecurityController.
+   * Convert a PolicyDecision into a DefenseAction: the off-chain verdict, plus
+   * the simulation evidence behind it, for the audit trail.
+   *
+   * This no longer builds a payload for the on-chain controller. The contract's
+   * withdraw(uint256) takes only an amount — the SecurityController derives
+   * collateral, debt and price from chain state, so there is nothing to send it
+   * and nothing a caller could pass to bias the verdict.
    */
   toDefenseAction(decision: PolicyDecision, simulation: SimulationResult): DefenseAction {
-    const projectedCollatValue = BigInt(simulation.simulatedState.collateralValue);
-    const projectedDebt = BigInt(simulation.assetDiff?.attacker?.borrowableAssets ?? '0');
+    // The TOTAL projected debt. `assetDiff.attacker.borrowableAssets` is the
+    // *delta* (projected - current); using it here understated debt and biased
+    // the reported ratio toward ALLOW. The total is recorded in the state diff.
+    const debtAfter = simulation.stateDiff?.entries.find((e) => e.key === 'debt')?.after;
+    const projectedDebt = BigInt(debtAfter ?? '0');
+    if (projectedDebt < 0n) {
+      throw new Error(`Simulation produced a negative projected debt: ${projectedDebt}`);
+    }
 
     let action: 'ALLOW' | 'REVIEW' | 'BLOCK';
     let reason: string;
@@ -168,6 +179,7 @@ export class PolicyEngine {
     return {
       action,
       reason,
+      targetOperation: 'withdraw(uint256)',
       projectedCollateralValue: simulation.simulatedState.collateralValue,
       projectedDebtValue: projectedDebt.toString(),
       behaviorFlagged: decision.level !== 'NORMAL',

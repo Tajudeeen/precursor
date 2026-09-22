@@ -2,12 +2,12 @@
 pragma solidity ^0.8.20;
 
 /// @title MockOracle — feeds a single price per asset to the LendingPool.
-/// @notice The oracle holds a privileged `setPrice` function. In the attack
-///         scenario the attacker gains temporary control by manipulating a
-///         liquidity pool backing the price feed. For V1 this is deterministic:
-///         anyone can call setPrice because the vulnerability surface is the
-///         lending pool's trust of a single price point with no TWAP or
-///         deviation check.
+/// @notice The oracle holds a privileged `setPrice` function, restricted to the
+///         owner. The vulnerability this demo models is NOT that the feed is
+///         world-writable — it is that the LendingPool trusts a single spot
+///         price point with no TWAP, deviation guard, or circuit breaker. In
+///         the attack scenario the owner stands in for a manipulated or
+///         compromised feed: whoever moves the price, the pool follows it.
 contract MockOracle {
     mapping(address => uint256) public price;          // price * 1e18
     mapping(address => uint256) public decimals;      // asset decimals
@@ -25,11 +25,11 @@ contract MockOracle {
         _;
     }
 
-    /// @dev In the controlled scenario this is the attacker's entry point
-    ///      during the oracle-manipulation phase. A real oracle would have
-    ///      guards, slippage limits, and TWAP — this one does not, which is
-    ///      the deliberate vulnerability.
-    function setPrice(address token, uint256 newPrice) external {
+    /// @dev The attack and defense scenarios drive the price through this
+    ///      function from the owner account. A real oracle would additionally
+    ///      have TWAP, slippage limits and deviation guards — this one does
+    ///      not, which is the deliberate vulnerability being demonstrated.
+    function setPrice(address token, uint256 newPrice) external onlyOwner {
         price[token] = newPrice;
         emit PriceUpdated(token, newPrice, 1e18);
     }
