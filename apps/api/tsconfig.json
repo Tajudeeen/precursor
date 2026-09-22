@@ -3,23 +3,46 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "node",
-    "lib": ["ES2022"],
+    "ignoreDeprecations": "5.0",
+    "lib": [
+      "ES2022"
+    ],
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "declaration": true,
+    "rootDir": "src",
     "outDir": "dist",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "paths": {
-      "@precursor/shared": ["../../packages/shared/dist/index.js"],
-      "@precursor/evm": ["../../packages/evm/dist/index.js"],
-      "@precursor/behavior-engine": ["../../packages/behavior-engine/dist/index.js"],
-      "@precursor/attack-analysis": ["../../packages/attack-analysis/dist/index.js"],
-      "@precursor/simulation": ["../../packages/simulation/dist/index.js"],
-      "@precursor/policy-engine": ["../../packages/policy-engine/dist/index.js"]
+      "@precursor/shared": [
+        "../../packages/shared/dist/index.js"
+      ],
+      "@precursor/evm": [
+        "../../packages/evm/dist/index.js"
+      ],
+      "@precursor/behavior-engine": [
+        "../../packages/behavior-engine/dist/index.js"
+      ],
+      "@precursor/attack-analysis": [
+        "../../packages/attack-analysis/dist/index.js"
+      ],
+      "@precursor/simulation": [
+        "../../packages/simulation/dist/index.js"
+      ],
+      "@precursor/policy-engine": [
+        "../../packages/policy-engine/dist/index.js"
+      ]
     }
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

@@ -3,15 +3,29 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "node",
-    "lib": ["ES2022"],
+    "ignoreDeprecations": "5.0",
+    "lib": [
+      "ES2022"
+    ],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "dist",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["packages/**/src", "packages/**/test", "apps/api/src"],
-  "exclude": ["node_modules", "dist", "packages/contracts", "apps/web"]
+  "include": [
+    "packages/**/src",
+    "packages/**/test",
+    "apps/api/src"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "packages/contracts",
+    "apps/web"
+  ]
 }
